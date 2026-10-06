@@ -2,7 +2,7 @@
 
 Aplicativo para monitorear la actividad comercial diaria, el cumplimiento de metas y las brechas de desempeño del equipo comercial de DMB.
 
-**Estado:** Etapas 0–4 construidas (base, registro diario, metas, motor de cálculo y dashboards) como prototipo local. Los datos se guardan en el navegador; Supabase llega en una etapa posterior.
+**Estado:** Etapas 0–5 construidas (base, registro diario, metas, motor de cálculo, dashboards e histórico) como prototipo local. Los datos se guardan en el navegador; Supabase llega en una etapa posterior.
 
 ## Cómo ejecutarlo
 
@@ -57,7 +57,7 @@ src/
   app/         Contexto global (sesión, fecha, notificaciones)
   ui/          Componentes reutilizables
   ui/graficas.tsx  Gráficas SVG propias (líneas y columnas con meta)
-  pantallas/   Login, Mi actividad, Tablero, Mi desempeño / Detalle, Registros, Metas, Equipo, Notificaciones, Pruebas
+  pantallas/   Login, Mi actividad, Tablero, Mi desempeño / Detalle, Histórico, Registros, Metas, Equipo, Notificaciones, Pruebas
 docs/
   reglas-y-decisiones.md   Reglas de negocio y decisiones tomadas
   ficha-construccion.md    Ficha SB360 original
@@ -72,6 +72,6 @@ docs/
 | 2. Registro comercial: formulario diario, edición del día, días excepcionales | ✅ |
 | 3. Metas y motor de cálculo: vigencias, cumplimiento, semáforo, ratios, alertas | ✅ |
 | 4. Dashboards: tablero del equipo, mi desempeño, detalle de comercial, tendencias | ✅ |
-| 5. Histórico: día, semana, mes, año, rango personalizado, tendencias | Pendiente |
+| 5. Histórico: día, semana, mes, año, rango personalizado, tendencias, CSV | ✅ |
 | 6. Supabase: autenticación real, base de datos, RLS, despliegue | Pendiente |
 | 7. Validación integral | Pendiente |

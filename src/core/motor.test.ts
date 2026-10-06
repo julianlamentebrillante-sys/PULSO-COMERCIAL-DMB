@@ -267,6 +267,54 @@ describe('Consolidado del equipo', () => {
   });
 });
 
+describe('Histórico por rango', () => {
+  it('divide un rango recortando los periodos de los extremos', () => {
+    expect(F.dividirRango('semana', '2026-10-07', '2026-10-20').map((p) => `${p.ini}/${p.fin}`))
+      .toEqual(['2026-10-07/2026-10-11', '2026-10-12/2026-10-18', '2026-10-19/2026-10-20']);
+    expect(F.dividirRango('mes', '2026-09-15', '2026-11-02').map((p) => `${p.ini}/${p.fin}`))
+      .toEqual(['2026-09-15/2026-09-30', '2026-10-01/2026-10-31', '2026-11-01/2026-11-02']);
+    expect(F.dividirRango('dia', '2026-10-09', '2026-10-11')).toHaveLength(3);
+  });
+
+  it('los tramos suman exactamente el resumen del rango', () => {
+    const metas = [meta('prospectos', 'semanal', 10)];
+    const regs = ['2026-09-21', '2026-09-30', '2026-10-02', '2026-10-06'].map((f) => registro(f, { prospectos: 3 }));
+    const h = M.evaluarHistorico({ usuario: USUARIO, metas, registros: regs, hoy: '2026-10-20', agrupacion: 'semana', ini: '2026-09-16', fin: '2026-10-07' });
+    const total = h.resumen.indicadores.find((i) => i.id === 'prospectos')!;
+    const tramos = h.tramos.map((t) => t.indicadores.find((i) => i.id === 'prospectos')!);
+    expect(total.realizado).toBe(12);
+    expect(tramos.reduce((s, t) => s + t.realizado, 0)).toBe(12);
+    // 16–18 sep: 3 días de una semana de 5 → 6; dos semanas completas → 20; 5–7 oct: 3 días → 6
+    expect(total.meta).toBe(32);
+    expect(tramos.reduce((s, t) => s + (t.meta ?? 0), 0)).toBeCloseTo(32, 6);
+  });
+
+  it('los días exigibles cuentan desde la fecha de inicio del comercial', () => {
+    const usuario = { ...USUARIO, fechaInicio: '2026-10-05' };
+    const regs = [registro('2026-10-05', {}), registro('2026-10-07', {})];
+    const ev = M.evaluarPeriodo({ usuario, metas: [], registros: regs, tipo: 'mes', periodo: F.periodo('mes', '2026-10-01'), hoy: '2026-10-09' });
+    expect(ev.diasHabilesTranscurridos).toBe(6); // 1, 2, 5, 6, 7, 8 oct
+    expect(ev.diasHabilesExigibles).toBe(4); // 5, 6, 7, 8 oct
+    expect(ev.diasRegistrados).toBe(2);
+    expect(ev.diasSinRegistro).toEqual(['2026-10-06', '2026-10-08']);
+  });
+
+  it('un año calendario se evalúa como año, con un tramo por mes', () => {
+    const h = M.evaluarHistorico({ usuario: USUARIO, metas: [meta('oportunidades', 'mensual', 3, '2026-01-01')], registros: [], hoy: '2027-01-15', agrupacion: 'mes', ini: '2026-01-01', fin: '2026-12-31' });
+    expect(h.resumen.tipo).toBe('anio');
+    expect(h.tramos).toHaveLength(12);
+    expect(h.resumen.indicadores.find((i) => i.id === 'oportunidades')!.meta).toBe(36);
+  });
+
+  it('consolida históricos de varios comerciales tramo a tramo', () => {
+    const a = M.evaluarHistorico({ usuario: USUARIO, metas: [], registros: [registro('2026-10-05', { invitaciones: 4 })], hoy: '2026-10-20', agrupacion: 'semana', ini: '2026-10-05', fin: '2026-10-18' });
+    const b = M.evaluarHistorico({ usuario: USUARIO, metas: [], registros: [registro('2026-10-13', { invitaciones: 6 })], hoy: '2026-10-20', agrupacion: 'semana', ini: '2026-10-05', fin: '2026-10-18' });
+    const eq = M.consolidarHistoricos([a, b])!;
+    expect(eq.tramos.map((t) => t.indicadores.find((i) => i.id === 'invitaciones')!.realizado)).toEqual([4, 6]);
+    expect(eq.resumen.indicadores.find((i) => i.id === 'invitaciones')!.realizado).toBe(10);
+  });
+});
+
 describe('Series para tendencias', () => {
   it('lista los últimos periodos del más antiguo al más reciente', () => {
     expect(F.periodosHasta('semana', '2026-10-07', 3).map((p) => p.ini)).toEqual(['2026-09-21', '2026-09-28', '2026-10-05']);

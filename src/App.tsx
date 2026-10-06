@@ -6,6 +6,7 @@ import type { Usuario } from './core/tipos';
 import * as perm from './datos/permisos';
 import { MIN_LONGITUD_CLAVE } from './datos/servicios';
 import { DetalleComercial, MiDesempeno } from './pantallas/Desempeno';
+import { Historico } from './pantallas/Historico';
 import { Tablero } from './pantallas/Tablero';
 import { Equipo } from './pantallas/Equipo';
 import { Login } from './pantallas/Login';
@@ -29,6 +30,7 @@ const RUTAS: Ruta[] = [
   { ruta: 'actividad', texto: () => 'Mi actividad', visible: perm.esComercial, elemento: <MiActividad /> },
   { ruta: 'tablero', texto: () => 'Tablero', visible: perm.veEquipo, elemento: <Tablero /> },
   { ruta: 'desempeno', texto: () => 'Mi desempeño', visible: perm.esComercial, elemento: <MiDesempeno /> },
+  { ruta: 'historico', texto: () => 'Histórico', visible: () => true, elemento: <Historico /> },
   { ruta: 'registros', texto: () => 'Registros', visible: perm.veEquipo, elemento: <Registros /> },
   { ruta: 'metas', texto: () => 'Metas', visible: perm.esAdmin, elemento: <Metas /> },
   { ruta: 'equipo', texto: () => 'Equipo', visible: perm.esAdmin, elemento: <Equipo /> },

@@ -207,6 +207,21 @@ export function periodosHasta(tipo: 'dia' | 'semana' | 'mes', fecha: FechaISO, n
   return out;
 }
 
+/**
+ * Divide un rango en días, semanas o meses. Los periodos de los extremos se recortan
+ * al rango, de modo que la suma de los tramos es exactamente el rango.
+ */
+export function dividirRango(agrupacion: 'dia' | 'semana' | 'mes', ini: FechaISO, fin: FechaISO): Periodo[] {
+  const out: Periodo[] = [];
+  let f = ini;
+  while (f <= fin) {
+    const p = periodo(agrupacion, f);
+    out.push({ tipo: agrupacion, ini: mayor(p.ini, ini), fin: menor(p.fin, fin) });
+    f = sumarDias(p.fin, 1);
+  }
+  return out;
+}
+
 export function rango(ini: FechaISO, fin: FechaISO): Periodo {
   return { tipo: 'rango', ini, fin };
 }

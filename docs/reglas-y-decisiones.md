@@ -76,6 +76,22 @@ Rojo = crítica, amarillo = atención. Las alertas usan solo metas configuradas 
 - **Gráficas:** el color sigue a la persona (orden fijo del equipo), nunca a su posición en un ranking. Hay leyenda, tooltip y vista de tabla en cada gráfica. La paleta está validada para daltonismo hasta 4 comerciales; con más, la tabla comparativa incluye a todos.
 - El tablero muestra solo comerciales **activos**.
 
+### Histórico (Etapa 5)
+
+- Lo ve todo usuario: el comercial solo el suyo; administración y dirección eligen un comercial o el **equipo consolidado**.
+- **Rangos:** este mes, mes anterior, últimos 30 días, últimos 3 meses, este año, año anterior o personalizado (máximo 3 años).
+- **Agrupación** por día (máximo 93 días), semana o mes. Los tramos de los extremos se recortan al rango, así la suma de los tramos es exactamente el rango, y la meta de un tramo parcial se prorratea por días hábiles.
+- Un año calendario completo se evalúa como año (visualización anual); por defecto se agrupa por mes.
+- **Días registrados / exigibles:** se cuentan desde la fecha de inicio de cada comercial.
+- **Descarga CSV** con separador `;` y coma decimal, lista para abrir en Excel en español.
+
+### Identidad visual
+
+- Colores corporativos de Dementes Brillantes: **negro, naranja y blanco**. Barra y botones principales en negro, el naranja como acento (marca, navegación activa, insignias, títulos de grupo) y fondos blancos.
+- Naranja provisional `#F26B1D` (texto sobre blanco: `#B4490C` para mantener contraste). Se reemplaza por el código exacto de la marca cuando esté disponible.
+- Las gráficas usan el naranja de marca como primera serie. El orden de colores está validado para daltonismo.
+- Los colores del semáforo (verde, amarillo, rojo) no cambian: son colores de estado, no de marca.
+
 ## 7. Decisiones técnicas
 
 | Decisión | Motivo |

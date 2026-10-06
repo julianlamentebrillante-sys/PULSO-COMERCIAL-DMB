@@ -92,6 +92,15 @@ describe('Visibilidad por rol', () => {
     expect(tablero.filas.map((f) => f.comercial.usuario)).toEqual(['mariafernanda']);
   });
 
+  it('el histórico respeta la visibilidad y valida el rango', async () => {
+    await expect(s.historico(pedro, pedro.id, 'semana', '2026-09-01', '2026-10-07')).resolves.toBeTruthy();
+    await expect(s.historico(pedro, maria.id, 'semana', '2026-09-01', '2026-10-07')).rejects.toThrow(/permiso/);
+    await expect(s.historico(pedro, 'equipo', 'semana', '2026-09-01', '2026-10-07')).rejects.toThrow(/equipo completo/);
+    await expect(s.historico(maria, 'equipo', 'mes', '2026-01-01', '2026-12-31')).resolves.toMatchObject({ resumen: { tipo: 'anio' } });
+    await expect(s.historico(admin, pedro.id, 'semana', '2026-10-07', '2026-10-01')).rejects.toThrow(/anterior/);
+    await expect(s.historico(admin, pedro.id, 'dia', '2026-01-01', '2026-12-31')).rejects.toThrow(/día por día/);
+  });
+
   it('la directora no puede configurar metas ni corregir registros ajenos', async () => {
     await expect(s.definirMeta(maria, { userId: pedro.id, indicador: 'invitaciones', periodicidad: 'diaria', valor: 10, desde: reloj.hoy })).rejects.toThrow(/administrador/);
     await expect(s.guardarRegistro(maria, pedro.id, reloj.hoy, {})).rejects.toThrow(/propia actividad/);

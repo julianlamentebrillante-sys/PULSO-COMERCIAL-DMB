@@ -177,6 +177,10 @@ export interface Evaluacion {
   diasHabiles: number;
   diasHabilesTranscurridos: number;
   avanceEsperado: number | null;
+  /** Días hábiles hasta el corte en que se exigía registro (desde la fecha de inicio del comercial). */
+  diasHabilesExigibles: number;
+  /** Días hábiles hasta el corte que sí tienen registro. */
+  diasRegistrados: number;
   diasSinRegistro: FechaISO[];
   diasExcepcionales: FechaISO[];
   indicadores: ResultadoIndicador[];
@@ -299,6 +303,9 @@ export function evaluarPeriodo({ usuario, metas, registros, tipo, periodo, hoy, 
   const transcurridos = evalFin ? F.contarDiasHabiles(per.ini, evalFin) : 0;
   const indicadores = C.INDICADORES.map((i) => evaluarIndicador(i, ctx));
   const ratios = C.RATIOS.map((r) => evaluarRatio(r, ctx));
+  const desdeExigible = usuario?.fechaInicio ? F.mayor(per.ini, usuario.fechaInicio) : per.ini;
+  const diasHabilesExigibles = evalFin ? F.contarDiasHabiles(desdeExigible, evalFin) : 0;
+  const diasSinReg = evalFin ? diasSinRegistro(usuario, registros, per.ini, evalFin) : [];
 
   return {
     tipo,
@@ -309,7 +316,9 @@ export function evaluarPeriodo({ usuario, metas, registros, tipo, periodo, hoy, 
     diasHabiles: total,
     diasHabilesTranscurridos: transcurridos,
     avanceEsperado: porcentaje(transcurridos, total),
-    diasSinRegistro: evalFin ? diasSinRegistro(usuario, registros, per.ini, evalFin) : [],
+    diasHabilesExigibles,
+    diasRegistrados: diasHabilesExigibles - diasSinReg.length,
+    diasSinRegistro: diasSinReg,
     diasExcepcionales: registros
       .filter((r) => r.fecha >= per.ini && r.fecha <= finActual && !F.esHabil(r.fecha))
       .map((r) => r.fecha),
@@ -407,6 +416,8 @@ export function consolidarEquipo(evs: Evaluacion[]): Evaluacion | null {
 
   return {
     ...base,
+    diasHabilesExigibles: suma(evs.map((e) => e.diasHabilesExigibles)),
+    diasRegistrados: suma(evs.map((e) => e.diasRegistrados)),
     diasSinRegistro: [],
     diasExcepcionales: [...new Set(evs.flatMap((e) => e.diasExcepcionales))].sort(),
     indicadores,
@@ -422,6 +433,37 @@ export function evaluarSerie(p: Omit<ParametrosEvaluacion, 'tipo' | 'periodo' | 
   return F.periodosHasta(p.tipo, p.fecha, p.n).map((periodo) => evaluarPeriodo({
     usuario: p.usuario, metas: p.metas, registros: p.registros, hoy: p.hoy, tipo: p.tipo, periodo,
   }));
+}
+
+export interface Historico {
+  /** Evaluación del rango completo. */
+  resumen: Evaluacion;
+  /** Evaluación de cada tramo (día, semana o mes) dentro del rango. */
+  tramos: Evaluacion[];
+}
+
+/**
+ * Histórico de un rango: resumen total + un tramo por día, semana o mes.
+ * El resumen usa el tipo 'anio' si el rango es exactamente un año calendario.
+ */
+export function evaluarHistorico(p: Omit<ParametrosEvaluacion, 'tipo' | 'periodo' | 'corte' | 'prioridad'> & {
+  agrupacion: 'dia' | 'semana' | 'mes'; ini: FechaISO; fin: FechaISO;
+}): Historico {
+  const base = { usuario: p.usuario, metas: p.metas, registros: p.registros, hoy: p.hoy };
+  const esAnio = p.ini.slice(5) === '01-01' && p.fin === `${p.ini.slice(0, 4)}-12-31`;
+  return {
+    resumen: evaluarPeriodo({ ...base, tipo: esAnio ? 'anio' : 'rango', periodo: { ini: p.ini, fin: p.fin } }),
+    tramos: F.dividirRango(p.agrupacion, p.ini, p.fin).map((periodo) => evaluarPeriodo({ ...base, tipo: p.agrupacion, periodo })),
+  };
+}
+
+/** Consolida históricos de varios comerciales tramo a tramo. */
+export function consolidarHistoricos(hs: Historico[]): Historico | null {
+  if (!hs.length) return null;
+  return {
+    resumen: consolidarEquipo(hs.map((h) => h.resumen)) as Evaluacion,
+    tramos: hs[0].tramos.map((_, i) => consolidarEquipo(hs.map((h) => h.tramos[i])) as Evaluacion),
+  };
 }
 
 // ---------- Alertas ----------

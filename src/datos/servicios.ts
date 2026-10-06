@@ -14,6 +14,8 @@ import { generarId, type Repositorio } from './repositorio';
 export const MAX_VALOR_REGISTRO = 9999;
 export const MAX_VALOR_META = 99999;
 export const MIN_LONGITUD_CLAVE = 6;
+export const MAX_DIAS_HISTORICO = 3 * 366;
+export const MAX_DIAS_AGRUPADO_POR_DIA = 92;
 
 export class ErrorNegocio extends Error {
   constructor(mensaje: string) {
@@ -347,6 +349,25 @@ export function crearServicios(repo: Repositorio, reloj: () => FechaISO) {
     return { periodos, porComercial, equipo };
   }
 
+  /**
+   * Histórico de un comercial o del equipo consolidado ('equipo') en un rango,
+   * agrupado por día, semana o mes.
+   */
+  async function historico(actor: Usuario, objetivo: string, agrupacion: 'dia' | 'semana' | 'mes', ini: FechaISO, fin: FechaISO): Promise<M.Historico> {
+    exigir(F.esFechaValida(ini) && F.esFechaValida(fin), 'Indica un rango de fechas válido.');
+    exigir(ini <= fin, 'La fecha inicial debe ser anterior o igual a la final.');
+    exigir(F.sumarDias(ini, MAX_DIAS_HISTORICO) >= fin, 'El rango máximo de consulta es de 3 años.');
+    if (agrupacion === 'dia') exigir(F.sumarDias(ini, MAX_DIAS_AGRUPADO_POR_DIA) >= fin, `Para ver día por día, el rango puede tener máximo ${MAX_DIAS_AGRUPADO_POR_DIA + 1} días. Agrupa por semana o mes.`);
+    const h = hoy();
+    if (objetivo === 'equipo') {
+      const datos = await exigirEquipo(actor);
+      exigir(datos.length, 'No hay comerciales activos.');
+      return M.consolidarHistoricos(datos.map((d) => M.evaluarHistorico({ ...d, agrupacion, ini, fin, hoy: h }))) as M.Historico;
+    }
+    const d = await datosComercial(actor, objetivo);
+    return M.evaluarHistorico({ ...d, agrupacion, ini, fin, hoy: h });
+  }
+
   async function alertas(actor: Usuario, comercialId?: string): Promise<M.Alerta[]> {
     const ids = comercialId ? [comercialId] : (await listarComerciales(actor)).map((c) => c.id);
     const out: M.Alerta[] = [];
@@ -380,7 +401,7 @@ export function crearServicios(repo: Repositorio, reloj: () => FechaISO) {
     listarUsuarios, listarComerciales, crearUsuario, actualizarUsuario, cambiarEstadoUsuario, restablecerClave,
     obtenerRegistro, listarRegistros, guardarRegistro,
     listarMetas, definirMeta, finalizarMeta,
-    evaluar, serie, evaluarEquipo, serieEquipo, alertas,
+    evaluar, serie, evaluarEquipo, serieEquipo, historico, alertas,
     listarNotificaciones, contarNotificacionesNoLeidas, marcarNotificacion,
   };
 }
