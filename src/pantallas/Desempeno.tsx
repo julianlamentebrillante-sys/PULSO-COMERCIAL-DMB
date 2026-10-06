@@ -1,207 +1,136 @@
 /**
- * Desempeño — vista de validación del motor (Etapa 3).
- * Meta, avance esperado, realizado, cumplimiento y semáforo por indicador.
- * En la Etapa 4 evoluciona a los dashboards con gráficas y tendencias.
+ * Dashboard individual: "Mi desempeño" (comercial) y "Detalle de comercial" (administración / dirección).
+ * Meta, realizado, cumplimiento, semáforo, tendencia e histórico personal.
  */
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useSesion } from '../app/contexto';
 import { useCarga } from '../app/useCarga';
 import * as C from '../core/catalogo';
 import * as F from '../core/fechas';
-import type { Evaluacion } from '../core/motor';
-import type { FechaISO, TipoPeriodo } from '../core/tipos';
-import * as perm from '../datos/permisos';
-import { Aviso, Cargando, Encabezado, ErrorCarga, ListaAlertas, Segmentado, Semaforo, Tarjeta, Vacio } from '../ui/componentes';
+import { indiceCumplimiento } from '../core/motor';
+import type { Usuario } from '../core/tipos';
+import { Aviso, Cargando, Encabezado, ErrorCarga, ListaAlertas, Tarjeta, Vacio } from '../ui/componentes';
+import { FiltroPeriodo, PERIODOS_TENDENCIA, SelectorComercial, usePeriodo } from '../ui/Controles';
 import { num, pct } from '../ui/formato';
-import { SelectorComercial, NavegadorPeriodo } from '../ui/Controles';
+import { COLORES_SERIE, GraficaColumnasMeta, GraficaLineas } from '../ui/graficas';
+import { Cifra, estadoIndice, INDICADORES_CLAVE, ResumenCorte, TablaIndicadores, TablaRatios, TarjetaKpi } from '../ui/Indicadores';
 
-type TipoVista = Extract<TipoPeriodo, 'dia' | 'semana' | 'mes'>;
-
-const TIPOS: { valor: TipoVista; texto: string }[] = [
-  { valor: 'dia', texto: 'Hoy' },
-  { valor: 'semana', texto: 'Semana' },
-  { valor: 'mes', texto: 'Mes' },
-];
-
-function moverFecha(tipo: TipoVista, fecha: FechaISO, paso: number): FechaISO {
-  if (tipo === 'dia') return F.sumarDias(fecha, paso);
-  if (tipo === 'semana') return F.sumarDias(fecha, 7 * paso);
-  return paso < 0 ? F.inicioMes(F.sumarDias(F.inicioMes(fecha), -1)) : F.sumarDias(F.finMes(fecha), 1);
-}
-
-function Resumen({ ev }: { ev: Evaluacion }) {
-  const enCurso = !ev.evalFin;
-  const datos: [string, string, string][] = [
-    ['Evaluado hasta', enCurso ? 'En curso' : F.formatoMedio(ev.evalFin!), enCurso ? 'Se evalúa desde mañana' : 'Registros hasta el día anterior'],
-    ['Días hábiles', `${ev.diasHabilesTranscurridos} de ${ev.diasHabiles}`, 'transcurridos al corte'],
-    ['Avance esperado', pct(ev.avanceEsperado), 'del periodo'],
-    ['Días sin registro', String(ev.diasSinRegistro.length), ev.diasSinRegistro.length ? ev.diasSinRegistro.map(F.formatoMedio).join(', ') : 'Ninguno'],
-    ['Semáforos', `${ev.resumen.verde} · ${ev.resumen.amarillo} · ${ev.resumen.rojo}`, 'verde · amarillo · rojo'],
-  ];
-  return (
-    <div className="datos">
-      {datos.map(([titulo, valor, detalle]) => (
-        <div key={titulo} className="dato">
-          <span className="dato__titulo">{titulo}</span>
-          <strong className="dato__valor">{valor}</strong>
-          <span className="dato__detalle">{detalle}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function TablaIndicadores({ ev }: { ev: Evaluacion }) {
-  const porId = Object.fromEntries(ev.indicadores.map((i) => [i.id, i]));
-  return (
-    <Tarjeta titulo="Indicadores">
-      <div className="tabla-contenedor">
-        <table className="tabla">
-          <thead>
-            <tr>
-              <th scope="col">Indicador</th>
-              <th scope="col" className="num">Meta periodo</th>
-              <th scope="col" className="num">Esperado al corte</th>
-              <th scope="col" className="num">Realizado</th>
-              <th scope="col" className="num">% vs esperado</th>
-              <th scope="col">Semáforo</th>
-              <th scope="col" className="num">% de la meta</th>
-              <th scope="col" className="num">Dif. vs meta</th>
-            </tr>
-          </thead>
-          <tbody>
-            {C.GRUPOS.map((g) => [
-              <tr key={`grupo-${g.id}`} className="tabla__grupo"><th colSpan={8} scope="colgroup">{g.nombre}</th></tr>,
-              ...C.indicadoresDelGrupo(g.id).map((ind) => {
-                const r = porId[ind.id];
-                const enCurso = r.estado === 'en_curso';
-                const realizado = enCurso ? r.realizadoActual : r.realizado;
-                const hoyExtra = !enCurso ? r.realizadoActual - r.realizado : 0;
-                return (
-                  <tr key={ind.id} className={ind.tipo === 'total' ? 'tabla__total' : undefined}>
-                    <th scope="row">{ind.nombre}</th>
-                    <td className="num">
-                      {num(r.meta)}
-                      {r.metaDerivada ? <span className="derivada" title={`Derivada de la meta ${r.fuentes.join(' / ')}`}> *</span> : null}
-                    </td>
-                    <td className="num">{num(r.esperado)}</td>
-                    <td className="num">
-                      {num(realizado, 0)}
-                      {hoyExtra > 0 ? <span className="hoy-extra"> +{num(hoyExtra, 0)} hoy</span> : null}
-                    </td>
-                    <td className="num">{pct(r.cumplimientoEsperado)}</td>
-                    <td><Semaforo estado={r.estado} /></td>
-                    <td className="num">{pct(enCurso ? r.avanceActual : r.cumplimientoMeta)}</td>
-                    <td className="num">{r.meta === null ? '—' : num(enCurso ? realizado - r.meta : r.diferenciaMeta)}</td>
-                  </tr>
-                );
-              }),
-            ])}
-          </tbody>
-        </table>
-      </div>
-      <p className="nota">
-        * Meta derivada: el indicador no tiene meta con esta periodicidad y se toma como referencia otra (p. ej. la suma de las metas diarias).
-        El semáforo compara lo realizado con el avance esperado al corte, para no penalizar antes de tiempo una meta semanal o mensual.
-      </p>
-    </Tarjeta>
-  );
-}
-
-function TablaRatios({ ev }: { ev: Evaluacion }) {
-  const porId = Object.fromEntries(ev.ratios.map((r) => [r.id, r]));
-  return (
-    <Tarjeta titulo="Ratios de efectividad">
-      <div className="tabla-contenedor">
-        <table className="tabla">
-          <thead>
-            <tr>
-              <th scope="col">Ratio</th>
-              <th scope="col" className="num">Valor</th>
-              <th scope="col" className="num">Umbral mínimo</th>
-              <th scope="col" className="num">Cumplimiento</th>
-              <th scope="col">Semáforo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {C.RATIOS.map((def) => {
-              const r = porId[def.id];
-              return (
-                <tr key={def.id}>
-                  <th scope="row">{def.nombre}<span className="formula">{def.formula} · {num(r.numerador, 0)} / {num(r.denominador, 0)}</span></th>
-                  <td className="num">{pct(r.valor)}</td>
-                  <td className="num">{pct(r.umbral)}</td>
-                  <td className="num">{pct(r.cumplimiento)}</td>
-                  <td><Semaforo estado={r.estado} /></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </Tarjeta>
-  );
-}
-
-export function Desempeno() {
+function PanelDesempeno({ comercial, controlesExtra }: { comercial: Usuario; controlesExtra?: ReactNode }) {
   const { usuario, servicios: s, hoy } = useSesion();
-  const veEquipo = perm.veEquipo(usuario);
-  const [comercialId, setComercialId] = useState<string | null>(null);
-  const [tipo, setTipo] = useState<TipoVista>('semana');
-  const [fecha, setFecha] = useState<FechaISO>(hoy);
+  const per = usePeriodo(hoy);
+  const [indicadorTendencia, setIndicadorTendencia] = useState('prospectos');
 
-  const comerciales = useCarga(() => s.listarComerciales(usuario, { incluirInactivos: true }), [s, usuario]);
-  const lista = comerciales.datos ?? [];
-  const seleccionado = lista.find((c) => c.id === comercialId) ?? lista.find((c) => c.id === usuario.id) ?? lista[0];
-
-  const evaluacion = useCarga(async () => {
-    if (!seleccionado) return null;
-    const [ev, alertas] = await Promise.all([
-      s.evaluar(usuario, seleccionado.id, tipo, F.periodo(tipo, fecha)),
-      s.alertas(usuario, seleccionado.id),
+  const datos = useCarga(async () => {
+    const [ev, serie, alertas] = await Promise.all([
+      s.evaluar(usuario, comercial.id, per.tipo, per.periodo),
+      s.serie(usuario, comercial.id, per.tipo, per.fecha, PERIODOS_TENDENCIA[per.tipo]),
+      s.alertas(usuario, comercial.id),
     ]);
-    return { ev, alertas };
-  }, [s, usuario, seleccionado?.id, tipo, fecha]);
+    return { ev, serie, alertas };
+  }, [s, usuario, comercial.id, per.tipo, per.fecha]);
 
-  const titulo = veEquipo ? 'Desempeño' : 'Mi desempeño';
-  if (comerciales.error) return <ErrorCarga error={comerciales.error} />;
-  if (!comerciales.datos) return <Cargando />;
-  if (!seleccionado) {
-    return <><Encabezado titulo={titulo} /><Vacio>Todavía no hay comerciales. Créalos en la sección Equipo.</Vacio></>;
-  }
+  const controles = <div className="controles">{controlesExtra}<FiltroPeriodo estado={per} /></div>;
+  if (datos.error) return <>{controles}<ErrorCarga error={datos.error} /></>;
+  if (!datos.datos) return <>{controles}<Cargando /></>;
 
-  const datos = evaluacion.datos;
+  const { ev, serie, alertas } = datos.datos;
+  const indice = indiceCumplimiento(ev);
+  const criticas = alertas.filter((a) => a.severidad === 'critica').length;
+  const etiquetas = serie.map((e) => F.etiquetaCorta(e.periodo));
+  const resultados = serie.map((e) => e.indicadores.find((i) => i.id === indicadorTendencia)!);
+  const nombreIndicador = C.buscar(indicadorTendencia)?.nombre ?? '';
+
   return (
     <>
-      <Encabezado titulo={titulo} subtitulo="Vista de validación del motor de cálculo. Los dashboards con gráficas y tendencias llegan en la Etapa 4." />
-      <div className="controles">
-        {veEquipo && lista.length > 1 ? <SelectorComercial comerciales={lista} valor={seleccionado.id} onCambio={setComercialId} /> : null}
-        <Segmentado etiqueta="Periodo" opciones={TIPOS} valor={tipo} onCambio={(v) => { setTipo(v); setFecha(hoy); }} />
-        <NavegadorPeriodo
-          etiqueta={F.etiquetaPeriodo(F.periodo(tipo, fecha))}
-          onAnterior={() => setFecha(moverFecha(tipo, fecha, -1))}
-          onSiguiente={() => setFecha(moverFecha(tipo, fecha, 1))}
-          onHoy={fecha === hoy ? undefined : () => setFecha(hoy)}
-        />
-      </div>
-      {evaluacion.error ? <ErrorCarga error={evaluacion.error} /> : null}
-      {!datos ? <Cargando /> : (
-        <div className="pila">
-          <Resumen ev={datos.ev} />
-          {datos.ev.diasExcepcionales.length ? (
-            <Aviso tipo="info">
-              Incluye actividad registrada en días no hábiles: {datos.ev.diasExcepcionales.map(F.formatoMedio).join(', ')}.
-              Suma a lo realizado, pero no al avance esperado.
-            </Aviso>
-          ) : null}
-          <TablaIndicadores ev={datos.ev} />
-          <TablaRatios ev={datos.ev} />
-          <Tarjeta titulo="Alertas vigentes">
-            <p className="nota">Calculadas con los registros hasta ayer, para el día hábil anterior, la semana y el mes en curso. Solo usan metas configuradas con esa periodicidad.</p>
-            <ListaAlertas alertas={datos.alertas} />
+      {controles}
+      <div className={`pila ${datos.cargando ? 'pila--recargando' : ''}`}>
+        <div className="cifras">
+          <Cifra principal titulo="Índice de cumplimiento" valor={indice === null ? '—' : pct(indice)} estado={estadoIndice(indice, ev)} detalle={<ResumenCorte ev={ev} />} />
+          <Cifra titulo="Días sin registro" valor={String(ev.diasSinRegistro.length)}
+            detalle={ev.diasSinRegistro.length ? ev.diasSinRegistro.map(F.formatoMedio).join(', ') : 'Todos los días hábiles registrados'} />
+          <Cifra titulo="Alertas vigentes" valor={String(alertas.length)} detalle={criticas ? `${criticas} críticas` : 'Ninguna crítica'} />
+        </div>
+        {ev.diasExcepcionales.length ? (
+          <Aviso tipo="info">
+            Incluye actividad registrada en días no hábiles: {ev.diasExcepcionales.map(F.formatoMedio).join(', ')}. Suma a lo realizado, pero no al avance esperado.
+          </Aviso>
+        ) : null}
+        <div className="kpis">
+          {INDICADORES_CLAVE.map((id) => <TarjetaKpi key={id} r={ev.indicadores.find((i) => i.id === id)!} />)}
+        </div>
+        <div className="rejilla rejilla--graficas">
+          <Tarjeta>
+            <GraficaLineas
+              titulo="Tendencia del índice de cumplimiento"
+              etiquetas={etiquetas}
+              series={[{ id: comercial.id, nombre: 'Índice', color: COLORES_SERIE[0], valores: serie.map(indiceCumplimiento) }]}
+              formato={(n) => `${num(n, 0)} %`}
+              referencia={{ valor: 100, etiqueta: 'Meta 100 %' }}
+              minimoMaximo={100}
+            />
+          </Tarjeta>
+          <Tarjeta>
+            <div className="controles controles--compactos">
+              <label className="solo-lector" htmlFor="indicador-tendencia">Indicador</label>
+              <select id="indicador-tendencia" value={indicadorTendencia} onChange={(e) => setIndicadorTendencia(e.target.value)}>
+                {C.INDICADORES.map((i) => <option key={i.id} value={i.id}>{i.nombre}</option>)}
+              </select>
+            </div>
+            <GraficaColumnasMeta
+              titulo={nombreIndicador}
+              etiquetas={etiquetas}
+              columnas={resultados.map((r, k) => (serie[k].evalFin ? r.realizado : r.realizadoActual))}
+              meta={resultados.map((r) => r.esperado)}
+              nombreColumnas="Realizado"
+              nombreMeta="Meta (al corte en el periodo actual)"
+              formato={(n) => num(n)}
+            />
           </Tarjeta>
         </div>
-      )}
+        <Tarjeta titulo="Alertas vigentes">
+          <p className="nota">Calculadas con los registros hasta ayer, para el día hábil anterior, la semana y el mes en curso.</p>
+          <ListaAlertas alertas={alertas} />
+        </Tarjeta>
+        <TablaIndicadores ev={ev} />
+        <TablaRatios ev={ev} />
+      </div>
+    </>
+  );
+}
+
+export function MiDesempeno() {
+  const { usuario } = useSesion();
+  return (
+    <>
+      <Encabezado titulo="Mi desempeño" subtitulo="Tus metas, tu avance y tu histórico. Se evalúa con tus registros hasta el día anterior." />
+      <PanelDesempeno comercial={usuario} />
+    </>
+  );
+}
+
+export function DetalleComercial() {
+  const { usuario, servicios: s } = useSesion();
+  const { id } = useParams();
+  const navegar = useNavigate();
+  const comerciales = useCarga(() => s.listarComerciales(usuario, { incluirInactivos: true }), [s, usuario]);
+
+  if (comerciales.error) return <ErrorCarga error={comerciales.error} />;
+  if (!comerciales.datos) return <Cargando />;
+  const comercial = comerciales.datos.find((c) => c.id === id) ?? comerciales.datos[0];
+  if (!comercial) return <><Encabezado titulo="Detalle de comercial" /><Vacio>Todavía no hay comerciales.</Vacio></>;
+
+  return (
+    <>
+      <p className="miga"><Link to="/tablero">‹ Tablero del equipo</Link></p>
+      <Encabezado titulo={comercial.nombre} subtitulo={comercial.activo ? 'Detalle de desempeño individual.' : 'Comercial inactivo · se conserva su histórico.'} />
+      <PanelDesempeno
+        key={comercial.id}
+        comercial={comercial}
+        controlesExtra={comerciales.datos.length > 1
+          ? <SelectorComercial comerciales={comerciales.datos} valor={comercial.id} onCambio={(nuevo) => navegar(`/comercial/${nuevo}`)} />
+          : null}
+      />
     </>
   );
 }

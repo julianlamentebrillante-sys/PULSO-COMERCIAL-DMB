@@ -191,6 +191,22 @@ export function periodo(tipo: Exclude<TipoPeriodo, 'rango'>, fecha: FechaISO): P
   }
 }
 
+/**
+ * Los últimos `n` periodos que terminan en el que contiene `fecha`, del más antiguo al más reciente.
+ * Para 'dia' solo cuenta días hábiles.
+ */
+export function periodosHasta(tipo: 'dia' | 'semana' | 'mes', fecha: FechaISO, n: number): Periodo[] {
+  const out: Periodo[] = [];
+  let f = tipo === 'dia' ? ultimoDiaHabilHasta(fecha) : fecha;
+  while (out.length < n) {
+    const p = periodo(tipo, f);
+    out.unshift(p);
+    if (tipo === 'dia') f = ultimoDiaHabilHasta(sumarDias(f, -1));
+    else f = sumarDias(p.ini, -1);
+  }
+  return out;
+}
+
 export function rango(ini: FechaISO, fin: FechaISO): Periodo {
   return { tipo: 'rango', ini, fin };
 }
@@ -208,6 +224,17 @@ export function formatoLargo(f: FechaISO): string { return mayuscula(FMT_LARGO.f
 export function formatoMedio(f: FechaISO): string { return FMT_MEDIO.format(aUTC(f)); }
 export function formatoDiaMes(f: FechaISO): string { return FMT_DIA_MES.format(aUTC(f)); }
 export function formatoMes(f: FechaISO): string { return mayuscula(FMT_MES.format(aUTC(f))); }
+
+/** Etiqueta breve para ejes de gráficas: "5 oct", "sem 28 sept", "oct 2026". */
+export function etiquetaCorta(p: Periodo): string {
+  switch (p.tipo) {
+    case 'dia': return formatoDiaMes(p.ini);
+    case 'semana': return formatoDiaMes(p.ini);
+    case 'mes': return formato({ month: 'short', year: '2-digit' }).format(aUTC(p.ini));
+    case 'anio': return p.ini.slice(0, 4);
+    case 'rango': return `${formatoDiaMes(p.ini)}–${formatoDiaMes(p.fin)}`;
+  }
+}
 
 export function etiquetaPeriodo(p: Periodo): string {
   switch (p.tipo) {

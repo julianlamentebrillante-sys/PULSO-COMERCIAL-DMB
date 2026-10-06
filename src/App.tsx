@@ -5,7 +5,8 @@ import * as F from './core/fechas';
 import type { Usuario } from './core/tipos';
 import * as perm from './datos/permisos';
 import { MIN_LONGITUD_CLAVE } from './datos/servicios';
-import { Desempeno } from './pantallas/Desempeno';
+import { DetalleComercial, MiDesempeno } from './pantallas/Desempeno';
+import { Tablero } from './pantallas/Tablero';
 import { Equipo } from './pantallas/Equipo';
 import { Login } from './pantallas/Login';
 import { Metas } from './pantallas/Metas';
@@ -26,7 +27,8 @@ interface Ruta {
 /** El orden define la pantalla de inicio de cada rol: la primera visible. */
 const RUTAS: Ruta[] = [
   { ruta: 'actividad', texto: () => 'Mi actividad', visible: perm.esComercial, elemento: <MiActividad /> },
-  { ruta: 'desempeno', texto: (u) => (perm.veEquipo(u) ? 'Desempeño' : 'Mi desempeño'), visible: () => true, elemento: <Desempeno /> },
+  { ruta: 'tablero', texto: () => 'Tablero', visible: perm.veEquipo, elemento: <Tablero /> },
+  { ruta: 'desempeno', texto: () => 'Mi desempeño', visible: perm.esComercial, elemento: <MiDesempeno /> },
   { ruta: 'registros', texto: () => 'Registros', visible: perm.veEquipo, elemento: <Registros /> },
   { ruta: 'metas', texto: () => 'Metas', visible: perm.esAdmin, elemento: <Metas /> },
   { ruta: 'equipo', texto: () => 'Equipo', visible: perm.esAdmin, elemento: <Equipo /> },
@@ -112,6 +114,7 @@ function Marco() {
       <main className="contenido">
         <Routes>
           {visibles.map((r) => <Route key={r.ruta} path={`/${r.ruta}`} element={r.elemento} />)}
+          {perm.veEquipo(usuario) ? <Route path="/comercial/:id" element={<DetalleComercial />} /> : null}
           <Route path="*" element={<Navigate to={`/${visibles[0].ruta}`} replace />} />
         </Routes>
       </main>

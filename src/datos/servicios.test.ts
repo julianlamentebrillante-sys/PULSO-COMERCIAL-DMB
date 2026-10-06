@@ -75,6 +75,23 @@ describe('Visibilidad por rol', () => {
     await expect(s.listarRegistros(maria, pedro.id)).resolves.toEqual([]);
   });
 
+  it('el tablero de equipo es solo para administración y dirección', async () => {
+    const semana = F.periodo('semana', reloj.hoy);
+    await expect(s.evaluarEquipo(pedro, 'semana', semana)).rejects.toThrow(/equipo completo/);
+    await expect(s.serieEquipo(pedro, 'semana', reloj.hoy, 4)).rejects.toThrow(/equipo completo/);
+    await s.guardarRegistro(pedro, pedro.id, reloj.hoy, { invitaciones: 3 });
+    const tablero = await s.evaluarEquipo(maria, 'semana', semana);
+    expect(tablero.filas.map((f) => [f.comercial.usuario, f.registroHoy])).toEqual(
+      expect.arrayContaining([['mariafernanda', false], ['pedro', true]]));
+    expect(tablero.equipo?.indicadores.find((i) => i.id === 'invitaciones')?.realizadoActual).toBe(3);
+  });
+
+  it('el tablero excluye comerciales inactivos', async () => {
+    await s.cambiarEstadoUsuario(admin, pedro.id, false);
+    const tablero = await s.evaluarEquipo(admin, 'semana', F.periodo('semana', reloj.hoy));
+    expect(tablero.filas.map((f) => f.comercial.usuario)).toEqual(['mariafernanda']);
+  });
+
   it('la directora no puede configurar metas ni corregir registros ajenos', async () => {
     await expect(s.definirMeta(maria, { userId: pedro.id, indicador: 'invitaciones', periodicidad: 'diaria', valor: 10, desde: reloj.hoy })).rejects.toThrow(/administrador/);
     await expect(s.guardarRegistro(maria, pedro.id, reloj.hoy, {})).rejects.toThrow(/propia actividad/);

@@ -217,3 +217,67 @@ describe('Días sin registro y alertas', () => {
     expect(M.generarAlertas({ usuario: { ...USUARIO, activo: false }, metas: [], registros: [], hoy: '2026-10-08' })).toEqual([]);
   });
 });
+
+describe('Índice de cumplimiento', () => {
+  it('promedia los indicadores evaluados y topa cada uno en 100 %', () => {
+    const metas = [meta('prospectos', 'semanal', 10), meta('propuestas', 'semanal', 10)];
+    // miércoles: esperado 4 en cada uno; prospectos 8 (200 % → 100), propuestas 2 (50 %)
+    const regs = [registro('2026-10-05', { prospectos: 8, propuestas: 2 })];
+    const ev = evaluar(metas, regs, 'semana', '2026-10-07', '2026-10-07');
+    expect(M.indiceCumplimiento(ev)).toBe(75);
+  });
+
+  it('es null cuando no hay nada evaluado', () => {
+    expect(M.indiceCumplimiento(evaluar([meta('prospectos', 'semanal', 10)], [], 'semana', '2026-10-05', '2026-10-05'))).toBeNull();
+    expect(M.indiceCumplimiento(evaluar([], [], 'semana', '2026-10-05', '2026-10-08'))).toBeNull();
+  });
+});
+
+describe('Consolidado del equipo', () => {
+  const evA = evaluar([meta('prospectos', 'semanal', 10), meta('tasa_aceptacion', 'umbral', 30)],
+    [registro('2026-10-05', { prospectos: 4, invitaciones: 50, conexiones: 10 })], 'semana', '2026-10-07', '2026-10-07');
+  const evB = evaluar([meta('prospectos', 'semanal', 5), meta('tasa_aceptacion', 'umbral', 40)],
+    [registro('2026-10-05', { prospectos: 1, invitaciones: 50, conexiones: 20 })], 'semana', '2026-10-07', '2026-10-07');
+  const evC = evaluar([], [registro('2026-10-05', { prospectos: 7 })], 'semana', '2026-10-07', '2026-10-07');
+
+  it('suma metas, esperados y realizados', () => {
+    const p = M.consolidarEquipo([evA, evB])!.indicadores.find((i) => i.id === 'prospectos')!;
+    expect(p.meta).toBe(15);
+    expect(p.esperado).toBe(6);
+    expect(p.realizado).toBe(5);
+    expect(p.cumplimientoEsperado).toBeCloseTo(83.3333, 3);
+    expect(p.estado).toBe('amarillo');
+  });
+
+  it('lo realizado por quien no tiene meta no infla el cumplimiento', () => {
+    const p = M.consolidarEquipo([evA, evB, evC])!.indicadores.find((i) => i.id === 'prospectos')!;
+    expect(p.realizado).toBe(12);
+    expect(p.cumplimientoEsperado).toBeCloseTo(83.3333, 3);
+  });
+
+  it('recalcula los ratios con sumas y promedia el umbral', () => {
+    const r = M.consolidarEquipo([evA, evB])!.ratios.find((x) => x.id === 'tasa_aceptacion')!;
+    expect(r.valor).toBe(30);
+    expect(r.umbral).toBe(35);
+    expect(r.estado).toBe('amarillo');
+  });
+
+  it('sin evaluaciones devuelve null', () => {
+    expect(M.consolidarEquipo([])).toBeNull();
+  });
+});
+
+describe('Series para tendencias', () => {
+  it('lista los últimos periodos del más antiguo al más reciente', () => {
+    expect(F.periodosHasta('semana', '2026-10-07', 3).map((p) => p.ini)).toEqual(['2026-09-21', '2026-09-28', '2026-10-05']);
+    expect(F.periodosHasta('mes', '2026-10-07', 3).map((p) => p.ini)).toEqual(['2026-08-01', '2026-09-01', '2026-10-01']);
+    // días: solo hábiles (12 oct es festivo; 10 y 11 son fin de semana)
+    expect(F.periodosHasta('dia', '2026-10-13', 3).map((p) => p.ini)).toEqual(['2026-10-08', '2026-10-09', '2026-10-13']);
+  });
+
+  it('evalúa cada periodo con la meta vigente en él', () => {
+    const metas = [meta('invitaciones', 'diaria', 20, '2026-09-01', '2026-10-04'), meta('invitaciones', 'diaria', 30, '2026-10-05')];
+    const serie = M.evaluarSerie({ usuario: USUARIO, metas, registros: [], hoy: '2026-10-08', tipo: 'semana', fecha: '2026-10-08', n: 2 });
+    expect(serie.map((e) => e.indicadores.find((i) => i.id === 'invitaciones')!.meta)).toEqual([100, 150]);
+  });
+});

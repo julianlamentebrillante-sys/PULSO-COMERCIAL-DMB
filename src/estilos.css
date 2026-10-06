@@ -22,6 +22,17 @@
   --vacio: #5a6677;      --vacio-fondo: #eef1f5;
   --morado: #6941c6;     --morado-fondo: #ede7fb;
 
+  /* Series de gráficas: orden categórico fijo validado contra daltonismo (ver dataviz). */
+  --serie-1: #2a78d6;
+  --serie-2: #eb6834;
+  --serie-3: #1baf7a;
+  --serie-4: #eda100;
+  --serie-meta: #52514e;
+  --serie-equipo: #18212f;
+  --grafica-rejilla: #e8ebf0;
+  --grafica-base: #c3c9d4;
+  --grafica-eje: #7a8494;
+
   --radio: 10px;
   --radio-peq: 6px;
   --sombra: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
@@ -321,6 +332,67 @@ select { width: auto; max-width: 100%; padding-right: 32px; }
 .toasts { position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 60; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
 .toast { pointer-events: auto; max-width: 480px; padding: 10px 16px; border-radius: var(--radio-peq); box-shadow: var(--sombra-alta); color: #fff; font-weight: 600; background: var(--verde); }
 .toast--error { background: var(--rojo); }
+
+/* ---------- Tableros ---------- */
+
+.miga { font-size: 14px; }
+.miga a { color: var(--color-primario); text-decoration: none; font-weight: 600; }
+.texto-suave { color: var(--color-texto-suave); }
+.pila--recargando { opacity: 0.55; transition: opacity 0.15s; }
+.controles--compactos select { width: 100%; }
+
+.cifras { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.cifra { background: var(--color-superficie); border: 1px solid var(--color-borde); border-radius: var(--radio); padding: 14px 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; box-shadow: var(--sombra); min-width: 0; }
+.cifra__titulo { font-size: 13px; color: var(--color-texto-suave); font-weight: 600; }
+.cifra__valor { font-size: 28px; font-weight: 700; line-height: 1.1; }
+.cifra__detalle { font-size: 12px; color: var(--color-texto-suave); overflow-wrap: anywhere; }
+.cifra--principal { grid-column: 1 / -1; }
+.cifra--principal .cifra__valor { font-size: 48px; }
+
+.kpis { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.kpi { background: var(--color-superficie); border: 1px solid var(--color-borde); border-radius: var(--radio); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.kpi__nombre { font-size: 13px; font-weight: 600; color: var(--color-texto-suave); }
+.kpi__valor { font-size: 24px; font-weight: 700; }
+.kpi__meta { font-size: 15px; font-weight: 500; color: var(--color-texto-suave); }
+.kpi__pie { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.kpi__pct { font-size: 12px; color: var(--color-texto-suave); }
+
+.celda-estado { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.punto { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--vacio); }
+.punto--verde { background: var(--verde); }
+.punto--amarillo { background: #d99a00; }
+.punto--rojo { background: var(--rojo); }
+.punto--en_curso { background: var(--neutro); }
+.tabla--comparativa tbody th { min-width: 140px; }
+
+.rejilla.rejilla--graficas { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1100px) {
+  .rejilla.rejilla--graficas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---------- Gráficas ---------- */
+
+.grafica { margin: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.grafica__cabecera { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.grafica__titulo { font-weight: 700; font-size: 15px; }
+.grafica__leyenda { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--color-texto-suave); }
+.leyenda-item { display: inline-flex; align-items: center; gap: 6px; }
+.clave-linea { width: 16px; height: 2px; border-radius: 1px; display: inline-block; flex: none; }
+.clave-barra { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: none; }
+.grafica__lienzo { position: relative; width: 100%; min-height: 220px; }
+.grafica__lienzo svg { display: block; overflow: visible; }
+.grafica__lienzo svg:focus-visible { outline: 2px solid var(--color-foco); outline-offset: 4px; border-radius: 4px; }
+.grafica__rejilla { stroke: var(--grafica-rejilla); stroke-width: 1; }
+.grafica__base { stroke: var(--grafica-base); stroke-width: 1; }
+.grafica__referencia { stroke: var(--serie-meta); stroke-width: 1; opacity: 0.6; }
+.grafica__cruz { stroke: var(--grafica-base); stroke-width: 1; }
+.grafica__eje { fill: var(--grafica-eje); font-size: 11px; font-variant-numeric: tabular-nums; }
+.grafica__etiqueta { fill: var(--color-texto); font-size: 12px; font-weight: 600; }
+.grafica__tooltip { position: absolute; top: 8px; min-width: 150px; max-width: 220px; background: var(--color-superficie); border: 1px solid var(--color-borde); border-radius: var(--radio-peq); box-shadow: var(--sombra-alta); padding: 8px 10px; font-size: 13px; pointer-events: none; z-index: 5; }
+.grafica__tooltip-titulo { font-size: 12px; color: var(--color-texto-suave); margin-bottom: 4px; }
+.grafica__tooltip-fila { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 8px; }
+.grafica__tooltip-fila strong { font-variant-numeric: tabular-nums; }
+.grafica__tooltip-fila span:last-child { color: var(--color-texto-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- Pantallas más anchas ---------- */
 

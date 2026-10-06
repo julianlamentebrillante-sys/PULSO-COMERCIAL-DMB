@@ -313,6 +313,40 @@ export function crearServicios(repo: Repositorio, reloj: () => FechaISO) {
     return M.evaluarPeriodo({ ...d, tipo, periodo, hoy: hoy() });
   }
 
+  /** Tendencia de un comercial: los últimos `n` periodos hasta el que contiene `fecha`. */
+  async function serie(actor: Usuario, comercialId: string, tipo: 'dia' | 'semana' | 'mes', fecha: FechaISO, n: number): Promise<M.Evaluacion[]> {
+    const d = await datosComercial(actor, comercialId);
+    return M.evaluarSerie({ ...d, tipo, fecha, n, hoy: hoy() });
+  }
+
+  async function exigirEquipo(actor: Usuario) {
+    exigir(perm.veEquipo(actor), 'Solo el administrador y la dirección comercial ven al equipo completo.');
+    const comerciales = await listarComerciales(actor);
+    return Promise.all(comerciales.map((c) => datosComercial(actor, c.id)));
+  }
+
+  /** Tablero del equipo: evaluación de cada comercial activo y el consolidado. */
+  async function evaluarEquipo(actor: Usuario, tipo: TipoPeriodo, periodo: Pick<Periodo, 'ini' | 'fin'>) {
+    const datos = await exigirEquipo(actor);
+    const h = hoy();
+    const filas = datos.map((d) => ({
+      comercial: d.usuario,
+      evaluacion: M.evaluarPeriodo({ ...d, tipo, periodo, hoy: h }),
+      registroHoy: d.registros.some((r) => r.fecha === h),
+    }));
+    return { filas, equipo: M.consolidarEquipo(filas.map((f) => f.evaluacion)) };
+  }
+
+  /** Tendencia del equipo: serie de cada comercial activo y la consolidada. */
+  async function serieEquipo(actor: Usuario, tipo: 'dia' | 'semana' | 'mes', fecha: FechaISO, n: number) {
+    const datos = await exigirEquipo(actor);
+    const h = hoy();
+    const porComercial = datos.map((d) => ({ comercial: d.usuario, serie: M.evaluarSerie({ ...d, tipo, fecha, n, hoy: h }) }));
+    const periodos = F.periodosHasta(tipo, fecha, n);
+    const equipo = periodos.map((_, i) => M.consolidarEquipo(porComercial.map((p) => p.serie[i])));
+    return { periodos, porComercial, equipo };
+  }
+
   async function alertas(actor: Usuario, comercialId?: string): Promise<M.Alerta[]> {
     const ids = comercialId ? [comercialId] : (await listarComerciales(actor)).map((c) => c.id);
     const out: M.Alerta[] = [];
@@ -346,7 +380,7 @@ export function crearServicios(repo: Repositorio, reloj: () => FechaISO) {
     listarUsuarios, listarComerciales, crearUsuario, actualizarUsuario, cambiarEstadoUsuario, restablecerClave,
     obtenerRegistro, listarRegistros, guardarRegistro,
     listarMetas, definirMeta, finalizarMeta,
-    evaluar, alertas,
+    evaluar, serie, evaluarEquipo, serieEquipo, alertas,
     listarNotificaciones, contarNotificacionesNoLeidas, marcarNotificacion,
   };
 }

@@ -90,6 +90,13 @@ export function buscar(id: string): Indicador | Ratio | null {
   return porId.get(id) ?? null;
 }
 
+/** Nombre corto para tarjetas y encabezados de tabla. */
+export function nombreCorto(id: string): string {
+  const x = porId.get(id);
+  if (!x) return id;
+  return x.tipo === 'ratio' ? x.nombre : x.corto;
+}
+
 export function esRatio(id: string): boolean {
   return porId.get(id)?.tipo === 'ratio';
 }

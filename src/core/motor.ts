@@ -319,6 +319,111 @@ export function evaluarPeriodo({ usuario, metas, registros, tipo, periodo, hoy, 
   };
 }
 
+// ---------- Índice, consolidado de equipo y series ----------
+
+/** Tope por indicador en el índice: sobrecumplir uno no tapa la brecha de otro. */
+export const TOPE_INDICE = 100;
+
+/**
+ * Índice de cumplimiento: promedio del cumplimiento vs esperado de los indicadores
+ * con meta evaluada, cada uno topado en 100 %. null si no hay nada que evaluar.
+ */
+export function indiceCumplimiento(ev: Evaluacion): number | null {
+  const valores = ev.indicadores
+    .filter((i) => i.cumplimientoEsperado !== null)
+    .map((i) => Math.min(i.cumplimientoEsperado as number, TOPE_INDICE));
+  if (!valores.length) return null;
+  return redondear(valores.reduce((a, b) => a + b, 0) / valores.length, 4);
+}
+
+const suma = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+
+/**
+ * Consolida las evaluaciones de varios comerciales (mismo periodo) en una del equipo.
+ * - Meta y esperado del equipo = suma de las de cada comercial.
+ * - El cumplimiento solo compara lo realizado por quienes tienen meta en ese indicador.
+ * - Ratios: se recalculan con numeradores y denominadores sumados; el umbral es el promedio.
+ */
+export function consolidarEquipo(evs: Evaluacion[]): Evaluacion | null {
+  if (!evs.length) return null;
+  const base = evs[0];
+
+  const indicadores = C.INDICADORES.map((ind): ResultadoIndicador => {
+    const rs = evs.map((e) => e.indicadores.find((i) => i.id === ind.id) as ResultadoIndicador);
+    const conMeta = rs.filter((r) => r.meta !== null);
+    const evaluables = conMeta.filter((r) => r.esperado !== null);
+    const meta = conMeta.length ? redondear(suma(conMeta.map((r) => r.meta as number)), 6) : null;
+    const esperado = evaluables.length ? redondear(suma(evaluables.map((r) => r.esperado as number)), 6) : null;
+    const realizadoEvaluable = suma(evaluables.map((r) => r.realizado));
+    const realizadoConMeta = suma(conMeta.map((r) => r.realizado));
+
+    let estado: Estado = 'sin_meta';
+    let cumplimientoEsperado: number | null = null;
+    if (conMeta.length) {
+      if (esperado !== null && esperado > 0) {
+        cumplimientoEsperado = porcentaje(realizadoEvaluable, esperado);
+        estado = semaforo(cumplimientoEsperado);
+      } else {
+        estado = 'en_curso';
+      }
+    }
+    const fuentes = [...new Set(conMeta.flatMap((r) => r.fuentes))];
+    return {
+      id: ind.id,
+      tipo: ind.tipo,
+      meta,
+      esperado,
+      realizado: suma(rs.map((r) => r.realizado)),
+      realizadoActual: suma(rs.map((r) => r.realizadoActual)),
+      cumplimientoEsperado,
+      cumplimientoMeta: meta ? porcentaje(realizadoConMeta, meta) : null,
+      avanceActual: meta ? porcentaje(suma(conMeta.map((r) => r.realizadoActual)), meta) : null,
+      diferenciaMeta: meta !== null ? redondear(realizadoConMeta - meta, 2) : null,
+      diferenciaEsperado: esperado !== null ? redondear(realizadoEvaluable - esperado, 2) : null,
+      fuentes,
+      metaDerivada: conMeta.some((r) => r.metaDerivada),
+      estado,
+    };
+  });
+
+  const ratios = C.RATIOS.map((def): ResultadoRatio => {
+    const rs = evs.map((e) => e.ratios.find((r) => r.id === def.id) as ResultadoRatio);
+    const numerador = suma(rs.map((r) => r.numerador));
+    const denominador = suma(rs.map((r) => r.denominador));
+    const umbrales = rs.map((r) => r.umbral).filter((u): u is number => u !== null);
+    const umbral = umbrales.length ? redondear(suma(umbrales) / umbrales.length, 2) : null;
+    const valor = denominador > 0 ? porcentaje(numerador, denominador) : null;
+    let estado: Estado;
+    let cumplimiento: number | null = null;
+    if (umbral === null) estado = 'sin_meta';
+    else if (valor === null) estado = 'sin_datos';
+    else if (!base.evalFin) estado = 'en_curso';
+    else {
+      cumplimiento = porcentaje(valor, umbral);
+      estado = semaforo(cumplimiento);
+    }
+    return { id: def.id, tipo: 'ratio', numerador, denominador, valor, umbral, cumplimiento, estado };
+  });
+
+  return {
+    ...base,
+    diasSinRegistro: [],
+    diasExcepcionales: [...new Set(evs.flatMap((e) => e.diasExcepcionales))].sort(),
+    indicadores,
+    ratios,
+    resumen: resumirEstados([...indicadores, ...ratios]),
+  };
+}
+
+/** Evalúa los últimos `n` periodos (del más antiguo al más reciente) hasta el que contiene `fecha`. */
+export function evaluarSerie(p: Omit<ParametrosEvaluacion, 'tipo' | 'periodo' | 'corte' | 'prioridad'> & {
+  tipo: 'dia' | 'semana' | 'mes'; fecha: FechaISO; n: number;
+}): Evaluacion[] {
+  return F.periodosHasta(p.tipo, p.fecha, p.n).map((periodo) => evaluarPeriodo({
+    usuario: p.usuario, metas: p.metas, registros: p.registros, hoy: p.hoy, tipo: p.tipo, periodo,
+  }));
+}
+
 // ---------- Alertas ----------
 
 export type Severidad = 'critica' | 'atencion';

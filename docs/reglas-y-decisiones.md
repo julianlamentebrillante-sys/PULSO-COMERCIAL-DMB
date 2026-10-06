@@ -61,7 +61,22 @@ Se calculan con los registros hasta ayer y solo para comerciales activos:
 
 Rojo = crítica, amarillo = atención. Las alertas usan solo metas configuradas explícitamente con su periodicidad, para no duplicar avisos con metas derivadas.
 
-## 6. Decisiones técnicas
+## 6. Tableros (Etapa 4)
+
+| Pantalla | Quién la ve | Contenido |
+|---|---|---|
+| **Tablero del equipo** | Administrador, director(a) | Índice del equipo, registro de hoy, días sin registro, alertas, KPI clave, cumplimiento por comercial, tendencia comparada y alertas del equipo |
+| **Mi desempeño** | Comercial | Su índice, KPI clave, tendencia del índice, tendencia de un indicador (realizado vs. meta), alertas y detalle |
+| **Detalle de comercial** | Administrador, director(a) | Lo mismo que *Mi desempeño*, para cualquier comercial (desde el tablero) |
+
+- **Índice de cumplimiento** = promedio del cumplimiento frente al esperado de los indicadores con meta evaluada, **cada uno topado en 100 %**. Así, sobrecumplir un indicador no tapa la brecha de otro. Su semáforo usa los mismos rangos (100 / 70).
+- **Consolidado del equipo:** meta y esperado = suma de los de cada comercial. El cumplimiento solo compara lo realizado por quienes tienen meta en ese indicador. Los ratios se recalculan con las sumas y su umbral es el promedio de los umbrales individuales.
+- **Indicadores clave** en tarjetas: prospectos, total de reuniones agendadas, total de reuniones realizadas, propuestas y oportunidades.
+- **Tendencias:** últimos 10 días hábiles, 8 semanas o 6 meses, según el selector. El periodo en curso no tiene índice hasta que transcurre al menos un día hábil.
+- **Gráficas:** el color sigue a la persona (orden fijo del equipo), nunca a su posición en un ranking. Hay leyenda, tooltip y vista de tabla en cada gráfica. La paleta está validada para daltonismo hasta 4 comerciales; con más, la tabla comparativa incluye a todos.
+- El tablero muestra solo comerciales **activos**.
+
+## 7. Decisiones técnicas
 
 | Decisión | Motivo |
 |---|---|
@@ -72,6 +87,8 @@ Rojo = crítica, amarillo = atención. Las alertas usan solo metas configuradas 
 | Festivos calculados (no una lista fija) | Ley Emiliani y festivos ligados a la Pascua se calculan para cualquier año. |
 | Contraseñas con hash simple en el prototipo | Solo para no guardarlas en texto plano en el navegador. **No es seguridad real**: en producción la autenticación será Supabase Auth. |
 
-## 7. Pendientes por definir
+## 8. Decisiones posteriores
 
-- **Alertas a inicio de periodo en indicadores de baja frecuencia.** Con una meta mensual de 3 oportunidades, el segundo día del mes el esperado es 0,3 y un 0 realizado ya es "crítico". Opciones: (a) dejarlo así; (b) evaluar contra el esperado redondeado hacia abajo, de modo que no se exija nada hasta que el esperado llegue a 1; (c) no generar alertas mensuales durante los primeros N días hábiles.
+| Fecha | Tema | Decisión |
+|---|---|---|
+| 5 oct 2026 | Alertas a inicio de periodo con metas bajas (p. ej. 0 de 0,3 esperados) | **Se dejan tal cual.** No se esperan metas tan bajas y la alerta temprana ayuda a presionar el cumplimiento. |
