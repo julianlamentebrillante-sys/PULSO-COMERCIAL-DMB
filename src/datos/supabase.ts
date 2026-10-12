@@ -231,7 +231,7 @@ export function crearServiciosSupabase(sb: SupabaseClient, reloj: () => FechaISO
       options: { data: { codigo_activacion: String(codigo).trim().toUpperCase() } },
     });
     if (error) {
-      if (/database error saving new user/i.test(error.message)) {
+      if (/correo_no_autorizado|database error saving new user/i.test(error.message)) {
         throw new ErrorNegocio('El correo no está autorizado, o el código no es válido o ya venció. Pide uno nuevo al administrador.');
       }
       if (/already registered|already exists/i.test(error.message)) {
