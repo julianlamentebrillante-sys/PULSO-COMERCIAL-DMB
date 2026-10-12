@@ -1,22 +1,29 @@
 /* PULSO COMERCIAL DMB — estilos. Primero móvil; los colores viven en tokens. */
 
 :root {
-  /* Identidad Dementes Brillantes: negro, naranja y blanco. */
+  /* Identidad corporativa Dementes Brillantes (valores oficiales). */
+  --db-orange: #ED741C;
+  --db-black: #010101;
+  --db-white: #FFFFFF;
+  --db-black-pure: #000000;
+
   --color-fondo: #f5f5f4;
-  --color-superficie: #ffffff;
+  --color-superficie: var(--db-white);
   --color-superficie-2: #fafaf9;
   --color-borde: #e7e5e4;
   --color-borde-fuerte: #d0ccc9;
-  --color-texto: #141414;
+  --color-texto: var(--db-black);
   --color-texto-suave: #5c5855;
-  --color-marca: #111111;
+  --color-marca: var(--db-black);
   --color-marca-2: #2b2b2b;
-  --color-acento: #f26b1d;          /* naranja corporativo */
-  --color-acento-suave: #fdebdf;
-  --color-acento-texto: #b4490c;    /* naranja oscuro legible sobre blanco */
-  --color-primario: #141414;
-  --color-primario-hover: #333333;
-  --color-foco: #f26b1d;
+  --color-acento: var(--db-orange);
+  --color-acento-suave: #fdeee3;
+  /* El naranja oficial sobre blanco tiene contraste 2,95:1: para texto pequeño
+     se usa este tono oscuro del mismo naranja (5,1:1, cumple WCAG AA). */
+  --color-acento-texto: #B0530F;
+  --color-primario: var(--db-black);
+  --color-primario-hover: #2b2b2b;
+  --color-foco: var(--db-orange);
 
   --verde: #157a46;      --verde-fondo: #dcf5e7;
   --amarillo: #8a5a00;   --amarillo-fondo: #fdf0cc;
@@ -26,12 +33,12 @@
   --morado: #6941c6;     --morado-fondo: #ede7fb;
 
   /* Series de gráficas: orden categórico fijo validado contra daltonismo (ver dataviz). */
-  --serie-1: #eb6834;   /* naranja de marca primero */
+  --serie-1: #ED741C;   /* naranja corporativo primero (paleta validada para daltonismo) */
   --serie-2: #2a78d6;
   --serie-3: #1baf7a;
   --serie-4: #eda100;
-  --serie-meta: #141414;
-  --serie-equipo: #141414;
+  --serie-meta: var(--db-black);
+  --serie-equipo: var(--db-black);
   --grafica-rejilla: #e8ebf0;
   --grafica-base: #c3c9d4;
   --grafica-eje: #7a8494;

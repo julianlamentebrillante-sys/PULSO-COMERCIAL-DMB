@@ -88,7 +88,7 @@ Rojo = crítica, amarillo = atención. Las alertas usan solo metas configuradas 
 ### Identidad visual
 
 - Colores corporativos de Dementes Brillantes: **negro, naranja y blanco**. Barra y botones principales en negro, el naranja como acento (marca, navegación activa, insignias, títulos de grupo) y fondos blancos.
-- Naranja provisional `#F26B1D` (texto sobre blanco: `#B4490C` para mantener contraste). Se reemplaza por el código exacto de la marca cuando esté disponible.
+- Valores oficiales: naranja `#ED741C`, negro `#010101`, blanco `#FFFFFF`. El naranja sobre blanco tiene contraste 2,95:1: se usa en marca, acentos y gráficas; para texto pequeño sobre blanco se usa `#B0530F` (5,1:1, WCAG AA).
 - Las gráficas usan el naranja de marca como primera serie. El orden de colores está validado para daltonismo.
 - Los colores del semáforo (verde, amarillo, rojo) no cambian: son colores de estado, no de marca.
 
@@ -103,7 +103,14 @@ Rojo = crítica, amarillo = atención. Las alertas usan solo metas configuradas 
 | Festivos calculados (no una lista fija) | Ley Emiliani y festivos ligados a la Pascua se calculan para cualquier año. |
 | Contraseñas con hash simple en el prototipo | Solo para no guardarlas en texto plano en el navegador. **No es seguridad real**: en producción la autenticación será Supabase Auth. |
 
-## 8. Decisiones posteriores
+## 8. Supabase (Etapa 6)
+
+- **Inicio de sesión con correo** (Supabase Auth) en lugar de usuario; permite recuperar contraseña.
+- Las reglas de permisos, validaciones, días excepcionales, notificaciones y vigencia de metas se aplican **en la base de datos** (RLS, triggers y funciones), no solo en la aplicación. Detalle en `supabase/README.md`.
+- Los roles se leen de `app_metadata` (solo el servidor la escribe). Un usuario sin roles queda inactivo.
+- Registro público desactivado: solo el administrador crea cuentas.
+
+## 9. Decisiones posteriores
 
 | Fecha | Tema | Decisión |
 |---|---|---|
