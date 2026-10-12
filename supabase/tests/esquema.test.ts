@@ -7,6 +7,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { btree_gist } from '@electric-sql/pglite/contrib/btree_gist';
+import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import * as F from '../../src/core/fechas';
 
@@ -16,12 +17,15 @@ const SUPABASE_SIMULADO = `
   create role anon nologin;
   create role authenticated nologin;
   create schema auth;
+  create schema extensions;
   grant usage on schema auth to anon, authenticated;
   create table auth.users (
     id uuid primary key,
     email text not null,
     raw_app_meta_data jsonb,
-    raw_user_meta_data jsonb
+    raw_user_meta_data jsonb,
+    encrypted_password text,
+    updated_at timestamptz
   );
   create function auth.uid() returns uuid language sql stable
     as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
@@ -42,7 +46,7 @@ const ID = {
 };
 
 async function crearBase() {
-  const db = await PGlite.create({ extensions: { btree_gist } });
+  const db = await PGlite.create({ extensions: { btree_gist, pgcrypto } });
   await db.exec(SUPABASE_SIMULADO);
   for (const archivo of readdirSync(DIR_MIGRACIONES).filter((a) => a.endsWith('.sql')).sort()) {
     await db.exec(readFileSync(join(DIR_MIGRACIONES, archivo), 'utf8'));
@@ -115,12 +119,10 @@ describe('Perfiles y alta de usuarios', () => {
     expect(rows[0]).toEqual({ nombre: 'María Fernanda', correo: 'maria@dmb.test', roles: ['director', 'comercial'], activo: true, fi: '2026-09-01' });
   });
 
-  it('ignora roles en user_metadata (los controla el usuario) y deja el perfil inactivo', async () => {
+  it('rechaza el alta sin autorización, aunque pida roles en user_metadata', async () => {
     const intruso = '00000000-0000-0000-0000-0000000000ff';
-    await crearUsuario(db, intruso, 'intruso@x.test', null, { roles: ['admin'] });
-    const { rows } = await db.query(`select roles::text[] as roles, activo from public.perfiles where id = $1`, [intruso]);
-    expect(rows[0]).toEqual({ roles: ['comercial'], activo: false });
-    expect(await como(db, intruso, 'select public.es_admin() as admin')).toEqual([{ admin: false }]);
+    await expect(crearUsuario(db, intruso, 'intruso@x.test', null, { roles: ['admin'] })).rejects.toThrow(/CORREO_NO_AUTORIZADO/);
+    expect((await db.query('select * from public.perfiles where id = $1', [intruso])).rows).toEqual([]);
   });
 
   it('cada quien ve los perfiles que le corresponden', async () => {
@@ -322,5 +324,93 @@ describe('Metas', () => {
     await definir(ID.admin, 'invitaciones', 'diaria', 15, '2026-10-01', ID.maria);
     expect(await como(db, ID.pedro, `select * from public.metas`)).toHaveLength(1);
     expect(await como(db, ID.maria, `select * from public.metas`)).toHaveLength(2);
+  });
+});
+
+describe('Acceso con código', () => {
+  let db: PGlite;
+  const NUEVA = '00000000-0000-0000-0000-0000000000d1';
+  const autorizar = (uid: string, correo: string, roles = '{comercial}') =>
+    como<{ codigo: string }>(db, uid, `select public.autorizar_acceso($1, 'Diana Nueva', $2::public.rol[], '2026-10-12') as codigo`, [correo, roles]);
+  const activar = (correo: string, codigo: string | null) =>
+    crearUsuario(db, NUEVA, correo, null, codigo === null ? {} : { codigo_activacion: codigo });
+
+  beforeEach(async () => {
+    db = await crearBase();
+    await equipoBase(db);
+  });
+
+  it('genera códigos legibles y distintos', async () => {
+    const [{ codigo: a }] = await autorizar(ID.admin, 'a@dmb.test');
+    const [{ codigo: b }] = await autorizar(ID.admin, 'b@dmb.test');
+    expect(a).toMatch(/^[A-HJKMNP-Z2-9]{5}-[A-HJKMNP-Z2-9]{5}$/);
+    expect(a).not.toBe(b);
+  });
+
+  it('solo el administrador autoriza accesos y los códigos se guardan cifrados', async () => {
+    await expect(autorizar(ID.maria, 'x@dmb.test')).rejects.toThrow(/administrador/);
+    await expect(autorizar(ID.pedro, 'x@dmb.test')).rejects.toThrow(/administrador/);
+    const [{ codigo }] = await autorizar(ID.admin, 'x@dmb.test');
+    expect(await como(db, ID.maria, 'select * from public.codigos_acceso')).toEqual([]);
+    const [fila] = await como<{ codigo_hash: string }>(db, ID.admin, 'select codigo_hash from public.codigos_acceso');
+    expect(fila.codigo_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(fila.codigo_hash).not.toContain(codigo.replace('-', ''));
+  });
+
+  it('con el código correcto se crea la cuenta activa con los datos autorizados', async () => {
+    const [{ codigo }] = await autorizar(ID.admin, 'Diana@DMB.test', '{director,comercial}');
+    await activar('diana@dmb.test', codigo.toLowerCase());
+    const { rows } = await db.query(`select nombre, correo, roles::text[] roles, activo, creado_por from public.perfiles where id = $1`, [NUEVA]);
+    expect(rows[0]).toEqual({ nombre: 'Diana Nueva', correo: 'diana@dmb.test', roles: ['director', 'comercial'], activo: true, creado_por: ID.admin });
+    const meta = (await db.query<{ m: object }>('select raw_user_meta_data m from auth.users where id = $1', [NUEVA])).rows[0].m;
+    expect(meta).not.toHaveProperty('codigo_activacion');
+  });
+
+  it('sin código, con código errado, de otro correo o vencido, no hay cuenta', async () => {
+    const [{ codigo }] = await autorizar(ID.admin, 'diana@dmb.test');
+    await expect(activar('diana@dmb.test', null)).rejects.toThrow(/CORREO_NO_AUTORIZADO/);
+    await expect(activar('diana@dmb.test', 'AAAAA-AAAAA')).rejects.toThrow(/CORREO_NO_AUTORIZADO/);
+    await expect(activar('otra@dmb.test', codigo)).rejects.toThrow(/CORREO_NO_AUTORIZADO/);
+    await db.query(`update public.codigos_acceso set expira = now() - interval '1 minute'`);
+    await expect(activar('diana@dmb.test', codigo)).rejects.toThrow(/CORREO_NO_AUTORIZADO/);
+  });
+
+  it('un código usado no sirve dos veces', async () => {
+    const [{ codigo }] = await autorizar(ID.admin, 'diana@dmb.test');
+    await activar('diana@dmb.test', codigo);
+    await expect(crearUsuario(db, '00000000-0000-0000-0000-0000000000d2', 'diana@dmb.test', null, { codigo_activacion: codigo }))
+      .rejects.toThrow(/CORREO_NO_AUTORIZADO/);
+  });
+
+  it('un código nuevo reemplaza al anterior y uno cancelado deja de servir', async () => {
+    const [{ codigo: viejo }] = await autorizar(ID.admin, 'diana@dmb.test');
+    const [{ codigo: nuevo }] = await autorizar(ID.admin, 'diana@dmb.test');
+    await expect(activar('diana@dmb.test', viejo)).rejects.toThrow(/CORREO_NO_AUTORIZADO/);
+    await como(db, ID.admin, `select public.cancelar_autorizacion('diana@dmb.test')`);
+    await expect(activar('diana@dmb.test', nuevo)).rejects.toThrow(/CORREO_NO_AUTORIZADO/);
+  });
+
+  it('no autoriza un correo que ya tiene cuenta', async () => {
+    await expect(autorizar(ID.admin, 'pedro@dmb.test')).rejects.toThrow(/Ya existe/);
+  });
+
+  it('restablecer: solo con el código vigente, una sola vez y sin sesión', async () => {
+    await expect(como(db, ID.maria, `select public.generar_codigo_restablecer($1)`, [ID.pedro])).rejects.toThrow(/administrador/);
+    const [{ codigo }] = await como<{ codigo: string }>(db, ID.admin, `select public.generar_codigo_restablecer($1) as codigo`, [ID.pedro]);
+    const restablecer = (correo: string, cod: string, clave: string) =>
+      como(db, null, `select public.restablecer_clave_con_codigo($1, $2, $3)`, [correo, cod, clave]);
+    await expect(restablecer('pedro@dmb.test', codigo, 'corta')).rejects.toThrow(/8 caracteres/);
+    await expect(restablecer('pedro@dmb.test', 'AAAAA-AAAAA', 'nueva-clave-1')).rejects.toThrow(/no son válidos/);
+    await expect(restablecer('maria@dmb.test', codigo, 'nueva-clave-1')).rejects.toThrow(/no son válidos/);
+    await restablecer('PEDRO@dmb.test', codigo, 'nueva-clave-1');
+    const { rows } = await db.query<{ ok: boolean }>(
+      `select encrypted_password = extensions.crypt('nueva-clave-1', encrypted_password) as ok from auth.users where id = $1`, [ID.pedro]);
+    expect(rows[0].ok).toBe(true);
+    await expect(restablecer('pedro@dmb.test', codigo, 'otra-clave-22')).rejects.toThrow(/no son válidos/);
+  });
+
+  it('un anónimo no puede autorizar accesos ni leer códigos', async () => {
+    await expect(como(db, null, `select public.autorizar_acceso('x@x.test', 'X', '{admin}', '2026-10-12')`)).rejects.toThrow(/permission denied/);
+    await expect(como(db, null, 'select * from public.codigos_acceso')).rejects.toThrow(/permission denied/);
   });
 });

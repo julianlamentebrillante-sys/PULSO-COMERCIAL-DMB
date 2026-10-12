@@ -7,10 +7,18 @@ Base de datos, inicio de sesión y reglas de seguridad del aplicativo.
 | Archivo | Qué es |
 |---|---|
 | `migrations/20261012000001_esquema_inicial.sql` | Tablas, festivos de Colombia, triggers, funciones de metas y reglas de seguridad (RLS) |
-| `functions/gestionar-usuarios/index.ts` | Edge Function: crear usuarios y restablecer contraseñas (solo administrador) |
-| `tests/esquema.test.ts` | 30 pruebas del esquema sobre PostgreSQL real (PGlite): se ejecutan con `npm test` |
+| `migrations/20261012000002_acceso_con_codigo.sql` | Acceso con código: autorizar personas, activar cuentas y restablecer contraseñas |
+| `tests/esquema.test.ts` | 39 pruebas del esquema sobre PostgreSQL real (PGlite): se ejecutan con `npm test` |
 
 La aplicación se conecta con las variables `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` (ver `.env.example`). Sin ellas, funciona como prototipo local.
+
+## Cómo se crean las cuentas (acceso con código)
+
+1. El administrador, en **Equipo → Autorizar persona**, escribe nombre, correo, roles y fecha de inicio. La app genera un **código de activación** (vence en 7 días, un solo uso) y un mensaje listo para enviar.
+2. La persona entra a la app → **Activar mi cuenta** → correo + código + **su propia contraseña**.
+3. Si olvida la contraseña: **Equipo → Restablecer acceso** genera un código; la persona usa **Olvidé mi contraseña**.
+
+Nadie más que la persona conoce su contraseña y no se envían correos. Sin un código válido, Supabase rechaza la creación de la cuenta.
 
 ## Qué garantiza la base de datos (aunque alguien se salte la aplicación)
 
@@ -21,30 +29,27 @@ La aplicación se conecta con las variables `VITE_SUPABASE_URL` y `VITE_SUPABASE
 - "Excepcional", autor, fechas y "corrección" los calcula el servidor: no se pueden falsear.
 - Un registro en sábado, domingo o festivo **notifica al administrador** (una sola vez) y queda en el historial.
 - Las metas nunca se superponen y no se pueden crear retroactivamente si ya hay historia.
-- Solo el administrador configura metas y edita perfiles, y no puede quitarse su propio rol.
-- Los roles solo se asignan desde el servidor: nadie puede registrarse como administrador.
+- Solo el administrador configura metas, autoriza personas y edita perfiles, y no puede quitarse su propio rol.
+- Los códigos de acceso se guardan cifrados (SHA-256), vencen en 7 días y sirven una sola vez.
 - Usuarios anónimos no ven nada. Un usuario desactivado pierde todo acceso.
 
 ## Puesta en marcha (una sola vez)
 
-### 1. Crear las tablas
+### 1. Ejecutar las migraciones
 
-1. En [supabase.com](https://supabase.com), abre el proyecto `pulso-comercial-dmb`.
-2. En el menú izquierdo, entra a **SQL Editor** → **New query**.
-3. Copia todo el contenido de `migrations/20261012000001_esquema_inicial.sql`, pégalo y haz clic en **Run**.
-4. Debe aparecer *Success. No rows returned*.
+En **SQL Editor**, ejecuta en orden el contenido de cada archivo de `migrations/`. Cada uno debe terminar en *Success*.
 
-### 2. Cerrar el registro público
+### 2. Configurar la autenticación
 
-En **Authentication** → **Sign In / Providers**:
-- Desactiva **Allow new users to sign up**. Las cuentas solo las crea el administrador.
-- Deja activo el proveedor **Email**.
+En **Authentication → Sign In / Providers**:
+- **Allow new users to sign up:** **ACTIVADO**. Solo pueden registrarse correos autorizados con un código válido; la base de datos rechaza cualquier otro.
+- **Confirm email:** **DESACTIVADO**. La identidad la confirma el código, y así no dependemos del envío de correos.
+- Proveedor **Email:** activado.
 
-### 3. Crear tu usuario administrador
+### 3. Crear el primer administrador
 
-1. Ve a **Authentication** → **Users** → **Add user** → **Create new user**.
-2. Escribe tu correo y una contraseña, marca **Auto Confirm User** y haz clic en **Create user**.
-3. Vuelve al **SQL Editor** y ejecuta (cambia el correo por el tuyo):
+1. **Authentication → Users → Add user → Create new user**: correo, contraseña y **Auto Confirm User** marcado.
+2. En el **SQL Editor** (cambia el correo):
 
 ```sql
 update public.perfiles
@@ -52,35 +57,8 @@ set nombre = 'Julián', roles = '{admin}', activo = true, fecha_inicio = public.
 where correo = 'tu-correo@dementesbrillantes.com.co';
 ```
 
-Por seguridad, un usuario creado sin roles queda **inactivo** hasta que se le asignen. Esta consulta te activa como administrador.
+Con la migración 2 aplicada, el panel de Supabase ya no permite crear usuarios sin código. Si alguna vez hace falta otro administrador de emergencia, autorízalo desde la app con el rol Administrador.
 
-### 4. Crear a María Fernanda
+### 4. Datos para conectar la aplicación
 
-Repite el paso 3 con su correo y ejecuta:
-
-```sql
-update public.perfiles
-set nombre = 'María Fernanda', roles = '{director,comercial}', activo = true, fecha_inicio = public.hoy_bogota()
-where correo = 'correo-de-maria@dementesbrillantes.com.co';
-```
-
-Después de este paso, los demás usuarios se crean desde la pantalla **Equipo** de la aplicación (requiere el paso 5).
-
-### 5. Publicar la función de usuarios
-
-La pantalla **Equipo** crea usuarios y restablece contraseñas mediante una Edge Function, porque esas operaciones requieren la clave secreta, que nunca va dentro de la aplicación.
-
-1. En el menú izquierdo, entra a **Edge Functions** → **Deploy a new function** → **Via Editor**.
-2. **Nombre de la función:** `gestionar-usuarios` (exactamente así).
-3. Borra el código de ejemplo y pega todo el contenido de `functions/gestionar-usuarios/index.ts`.
-4. Haz clic en **Deploy function**.
-
-No hay que configurar nada más: Supabase entrega automáticamente a la función la URL y la clave secreta del proyecto.
-
-### 6. Datos para conectar la aplicación
-
-En **Project Settings** → **API** (o **Data API**), copia:
-- **Project URL**
-- La clave **anon / publishable**. Es pública por diseño: la seguridad la dan las reglas RLS.
-
-**Nunca** compartas ni pongas en la aplicación la clave **service_role / secret**.
+En **Project Settings → API / Data API**: **Project URL** y la clave **anon / publishable** (pública por diseño). **Nunca** compartas ni pongas en la aplicación la clave **service_role / secret**.

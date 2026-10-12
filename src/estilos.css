@@ -425,3 +425,22 @@ select { width: auto; max-width: 100%; padding-right: 32px; }
   .columnas--parejas { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .columnas__lateral { position: sticky; top: 120px; }
 }
+
+/* ---------- Acceso con código ---------- */
+
+.campo__titulo { font-weight: 600; font-size: 14px; }
+.codigo-acceso {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 30px; font-weight: 700; letter-spacing: 0.12em; text-align: center;
+  padding: 14px; border-radius: var(--radio); background: var(--color-acento-suave);
+  border: 2px dashed var(--color-acento); color: var(--color-texto);
+}
+.mensaje-acceso {
+  width: 100%; resize: vertical; font: inherit; font-size: 14px; line-height: 1.5;
+  padding: 10px 12px; border: 1px solid var(--color-borde-fuerte); border-radius: var(--radio-peq);
+  background: var(--color-superficie-2);
+}
+.login__enlaces { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+.enlace { background: none; border: 0; padding: 4px 0; color: var(--color-acento-texto); font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.enlace:hover { color: var(--color-texto); }
+.login__titulo { font-size: 18px; font-weight: 700; margin-bottom: 4px; }

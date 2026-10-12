@@ -12,7 +12,10 @@ import type { FechaISO, Meta, Notificacion, Periodicidad, Registro, Rol, Usuario
 import { crearConsultas } from './consultas';
 import { ErrorNegocio, exigir } from './errores';
 import * as perm from './permisos';
-import { MAX_VALOR_META, MAX_VALOR_REGISTRO, MIN_LONGITUD_CLAVE, type DatosMeta, type DatosUsuario, type Servicios } from './servicios';
+import {
+  MAX_VALOR_META, MAX_VALOR_REGISTRO, MIN_LONGITUD_CLAVE, MIN_LONGITUD_CLAVE_PROPIA,
+  type AutorizacionPendiente, type DatosMeta, type DatosUsuario, type Servicios,
+} from './servicios';
 
 // ---------- Configuración ----------
 
@@ -124,23 +127,6 @@ export function crearServiciosSupabase(sb: SupabaseClient, reloj: () => FechaISO
     return u;
   }
 
-  /** Llama a la Edge Function que crea usuarios y restablece contraseñas. */
-  async function funcionUsuarios(cuerpo: Record<string, unknown>): Promise<{ id?: string }> {
-    const { data, error } = await sb.functions.invoke('gestionar-usuarios', { body: cuerpo });
-    if (error) {
-      let mensaje = error.message;
-      const respuesta = (error as { context?: Response }).context;
-      if (respuesta && typeof respuesta.json === 'function') {
-        try { mensaje = (await respuesta.json()).error ?? mensaje; } catch { /* respuesta sin JSON */ }
-      }
-      if (/failed to send|not found|404/i.test(mensaje)) {
-        mensaje = 'La función de usuarios no está disponible en Supabase. Revisa que "gestionar-usuarios" esté desplegada.';
-      }
-      throw traducirError({ message: mensaje });
-    }
-    return data ?? {};
-  }
-
   function validarDatosUsuario(datos: DatosUsuario) {
     const nombre = String(datos.nombre ?? '').trim();
     const correo = String(datos.usuario ?? '').trim().toLowerCase();
@@ -199,16 +185,71 @@ export function crearServiciosSupabase(sb: SupabaseClient, reloj: () => FechaISO
     return (await listarUsuarios(actor)).filter((u) => perm.esComercial(u) && (incluirInactivos || u.activo));
   }
 
-  async function crearUsuario(actor: Usuario, datos: DatosUsuario): Promise<Usuario> {
-    exigir(perm.esAdmin(actor), 'Solo el administrador puede crear usuarios.');
+  async function crearUsuario(_actor: Usuario, _datos: DatosUsuario): Promise<Usuario> {
+    throw new ErrorNegocio('En esta versión las personas se autorizan con un código de activación.');
+  }
+
+  /** Autoriza un correo y devuelve el código de activación (solo se muestra una vez). */
+  async function autorizarAcceso(actor: Usuario, datos: DatosUsuario): Promise<string> {
+    exigir(perm.esAdmin(actor), 'Solo el administrador puede autorizar accesos.');
     const v = validarDatosUsuario(datos);
-    exigir(String(datos.clave ?? '').length >= MIN_LONGITUD_CLAVE, `La contraseña debe tener al menos ${MIN_LONGITUD_CLAVE} caracteres.`);
-    const { id } = await funcionUsuarios({
-      accion: 'crear', correo: v.correo, clave: datos.clave, nombre: v.nombre, roles: v.roles, fecha_inicio: v.fechaInicio,
+    return (await ok(sb.rpc('autorizar_acceso', {
+      p_correo: v.correo, p_nombre: v.nombre, p_roles: v.roles, p_fecha_inicio: v.fechaInicio,
+    }))) as string;
+  }
+
+  async function listarAutorizaciones(actor: Usuario): Promise<AutorizacionPendiente[]> {
+    if (!perm.esAdmin(actor)) return [];
+    const filas = await ok(sb.from('codigos_acceso')
+      .select('correo, nombre, roles, fecha_inicio, creado, expira')
+      .eq('tipo', 'activacion').is('usado', null).order('creado', { ascending: false }));
+    return ((filas ?? []) as { correo: string; nombre: string; roles: Rol[]; fecha_inicio: string; creado: string; expira: string }[])
+      .map((f) => ({ correo: f.correo, nombre: f.nombre, roles: f.roles, fechaInicio: f.fecha_inicio, creado: f.creado, expira: f.expira }));
+  }
+
+  async function cancelarAutorizacion(actor: Usuario, correo: string): Promise<void> {
+    exigir(perm.esAdmin(actor), 'Solo el administrador puede gestionar accesos.');
+    await ok(sb.rpc('cancelar_autorizacion', { p_correo: correo }));
+  }
+
+  async function generarCodigoRestablecer(actor: Usuario, id: string): Promise<string> {
+    exigir(perm.esAdmin(actor), 'Solo el administrador puede restablecer contraseñas.');
+    return (await ok(sb.rpc('generar_codigo_restablecer', { p_user_id: id }))) as string;
+  }
+
+  function validarClavePropia(clave: string) {
+    exigir(String(clave ?? '').length >= MIN_LONGITUD_CLAVE_PROPIA, `La contraseña debe tener al menos ${MIN_LONGITUD_CLAVE_PROPIA} caracteres.`);
+  }
+
+  /** La persona activa su cuenta con el código que le dio el administrador. */
+  async function activarCuenta(correo: string, codigo: string, clave: string): Promise<void> {
+    validarClavePropia(clave);
+    exigir(String(codigo ?? '').trim().length > 0, 'Escribe el código de activación.');
+    const { data, error } = await sb.auth.signUp({
+      email: String(correo ?? '').trim().toLowerCase(),
+      password: clave,
+      options: { data: { codigo_activacion: String(codigo).trim().toUpperCase() } },
     });
-    const u = id ? await perfil(id) : null;
-    exigir(u, 'El usuario se creó, pero no se pudo leer su perfil. Recarga la página.');
-    return u;
+    if (error) {
+      if (/database error saving new user/i.test(error.message)) {
+        throw new ErrorNegocio('El correo no está autorizado, o el código no es válido o ya venció. Pide uno nuevo al administrador.');
+      }
+      if (/already registered|already exists/i.test(error.message)) {
+        throw new ErrorNegocio('Esta cuenta ya está activada. Inicia sesión, o usa «Olvidé mi contraseña» si no la recuerdas.');
+      }
+      if (/signups? not allowed|signup is disabled/i.test(error.message)) {
+        throw new ErrorNegocio('La activación de cuentas está deshabilitada en Supabase. Avísale al administrador.');
+      }
+      throw traducirError(error);
+    }
+    if (!data.session) {
+      throw new ErrorNegocio('Tu cuenta quedó creada, pero Supabase pide confirmar el correo. Avísale al administrador para que desactive «Confirm email».');
+    }
+  }
+
+  async function restablecerConCodigo(correo: string, codigo: string, clave: string): Promise<void> {
+    validarClavePropia(clave);
+    await ok(sb.rpc('restablecer_clave_con_codigo', { p_correo: correo, p_codigo: codigo, p_clave: clave }));
   }
 
   async function actualizarUsuario(actor: Usuario, id: string, datos: DatosUsuario): Promise<Usuario> {
@@ -227,10 +268,8 @@ export function crearServiciosSupabase(sb: SupabaseClient, reloj: () => FechaISO
     return aUsuario(fila as FilaPerfil);
   }
 
-  async function restablecerClave(actor: Usuario, id: string, nueva: string): Promise<void> {
-    exigir(perm.esAdmin(actor), 'Solo el administrador puede restablecer contraseñas.');
-    exigir(String(nueva ?? '').length >= MIN_LONGITUD_CLAVE, `La contraseña debe tener al menos ${MIN_LONGITUD_CLAVE} caracteres.`);
-    await funcionUsuarios({ accion: 'restablecer_clave', id, clave: nueva });
+  async function restablecerClave(_actor: Usuario, _id: string, _nueva: string): Promise<void> {
+    throw new ErrorNegocio('En esta versión las contraseñas se restablecen con un código.');
   }
 
   // ===== Registro diario =====
@@ -342,5 +381,8 @@ export function crearServiciosSupabase(sb: SupabaseClient, reloj: () => FechaISO
     listarMetas, definirMeta, finalizarMeta,
     ...consultas,
     listarNotificaciones, contarNotificacionesNoLeidas, marcarNotificacion,
+    accesoConCodigo: true,
+    autorizarAcceso, listarAutorizaciones, cancelarAutorizacion, generarCodigoRestablecer,
+    activarCuenta, restablecerConCodigo,
   };
 }

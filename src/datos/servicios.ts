@@ -54,6 +54,19 @@ export interface DatosUsuario {
   clave?: string;
 }
 
+/** Autorización de acceso pendiente de activar (solo en la versión con Supabase). */
+export interface AutorizacionPendiente {
+  correo: string;
+  nombre: string;
+  roles: Rol[];
+  fechaInicio: FechaISO;
+  creado: string;
+  expira: string;
+}
+
+/** Mínimo para contraseñas que crea la propia persona (activación y restablecimiento). */
+export const MIN_LONGITUD_CLAVE_PROPIA = 8;
+
 export interface DatosMeta {
   userId: string;
   indicador: string;
@@ -328,5 +341,17 @@ export function crearServicios(repo: Repositorio, reloj: () => FechaISO) {
     listarMetas, definirMeta, finalizarMeta,
     ...consultas,
     listarNotificaciones, contarNotificacionesNoLeidas, marcarNotificacion,
+    // El acceso con código solo existe en la versión con Supabase.
+    accesoConCodigo: false as boolean,
+    autorizarAcceso: async (_actor: Usuario, _datos: DatosUsuario): Promise<string> => soloSupabase(),
+    listarAutorizaciones: async (_actor: Usuario): Promise<AutorizacionPendiente[]> => [],
+    cancelarAutorizacion: async (_actor: Usuario, _correo: string): Promise<void> => soloSupabase(),
+    generarCodigoRestablecer: async (_actor: Usuario, _id: string): Promise<string> => soloSupabase(),
+    activarCuenta: async (_correo: string, _codigo: string, _clave: string): Promise<void> => soloSupabase(),
+    restablecerConCodigo: async (_correo: string, _codigo: string, _clave: string): Promise<void> => soloSupabase(),
   };
+}
+
+function soloSupabase(): never {
+  throw new ErrorNegocio('Esta opción solo está disponible en la versión conectada a Supabase.');
 }
