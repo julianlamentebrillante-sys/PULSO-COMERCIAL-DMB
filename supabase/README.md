@@ -8,6 +8,7 @@ Base de datos, inicio de sesión y reglas de seguridad del aplicativo.
 |---|---|
 | `migrations/20261012000001_esquema_inicial.sql` | Tablas, festivos de Colombia, triggers, funciones de metas y reglas de seguridad (RLS) |
 | `migrations/20261012000002_acceso_con_codigo.sql` | Acceso con código: autorizar personas, activar cuentas y restablecer contraseñas |
+| `migrations/20261012000003_permisos_por_defecto.sql` | Retira los permisos automáticos de Supabase sobre tablas nuevas |
 | `tests/esquema.test.ts` | 39 pruebas del esquema sobre PostgreSQL real (PGlite): se ejecutan con `npm test` |
 
 La aplicación se conecta con las variables `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` (ver `.env.example`). Sin ellas, funciona como prototipo local.
