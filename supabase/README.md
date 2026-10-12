@@ -7,7 +7,10 @@ Base de datos, inicio de sesión y reglas de seguridad del aplicativo.
 | Archivo | Qué es |
 |---|---|
 | `migrations/20261012000001_esquema_inicial.sql` | Tablas, festivos de Colombia, triggers, funciones de metas y reglas de seguridad (RLS) |
+| `functions/gestionar-usuarios/index.ts` | Edge Function: crear usuarios y restablecer contraseñas (solo administrador) |
 | `tests/esquema.test.ts` | 30 pruebas del esquema sobre PostgreSQL real (PGlite): se ejecutan con `npm test` |
+
+La aplicación se conecta con las variables `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` (ver `.env.example`). Sin ellas, funciona como prototipo local.
 
 ## Qué garantiza la base de datos (aunque alguien se salte la aplicación)
 
@@ -61,9 +64,20 @@ set nombre = 'María Fernanda', roles = '{director,comercial}', activo = true, f
 where correo = 'correo-de-maria@dementesbrillantes.com.co';
 ```
 
-Más adelante, la pantalla **Equipo** de la aplicación creará usuarios directamente, sin pasar por el panel.
+Después de este paso, los demás usuarios se crean desde la pantalla **Equipo** de la aplicación (requiere el paso 5).
 
-### 5. Datos para conectar la aplicación
+### 5. Publicar la función de usuarios
+
+La pantalla **Equipo** crea usuarios y restablece contraseñas mediante una Edge Function, porque esas operaciones requieren la clave secreta, que nunca va dentro de la aplicación.
+
+1. En el menú izquierdo, entra a **Edge Functions** → **Deploy a new function** → **Via Editor**.
+2. **Nombre de la función:** `gestionar-usuarios` (exactamente así).
+3. Borra el código de ejemplo y pega todo el contenido de `functions/gestionar-usuarios/index.ts`.
+4. Haz clic en **Deploy function**.
+
+No hay que configurar nada más: Supabase entrega automáticamente a la función la URL y la clave secreta del proyecto.
+
+### 6. Datos para conectar la aplicación
 
 En **Project Settings** → **API** (o **Data API**), copia:
 - **Project URL**

@@ -73,10 +73,11 @@ function CambiarClave({ onCerrar }: { onCerrar: () => void }) {
 }
 
 function Marco() {
-  const { usuario, hoy, fechaSimulada, noLeidas, cerrarSesion } = useSesion();
+  const { usuario, hoy, fechaSimulada, noLeidas, cerrarSesion, modo } = useSesion();
   const [menu, setMenu] = useState(false);
   const [cambiandoClave, setCambiandoClave] = useState(false);
-  const visibles = RUTAS.filter((r) => r.visible(usuario));
+  // Las herramientas de prueba (fecha simulada, datos demo) solo existen en el prototipo local.
+  const visibles = RUTAS.filter((r) => r.visible(usuario) && (r.ruta !== 'pruebas' || modo === 'local'));
 
   return (
     <div className="marco">

@@ -11,7 +11,8 @@ import { Campo, Cargando, Encabezado, ErrorCarga, Modal, Tarjeta, useAvisos } fr
 const nombreRol = (r: Rol) => ROLES.find((x) => x.id === r)?.nombre ?? r;
 
 function FormularioUsuario({ existente, onCerrar, onGuardado }: { existente: Usuario | null; onCerrar: () => void; onGuardado: () => Promise<void> }) {
-  const { usuario: actor, servicios: s, hoy } = useSesion();
+  const { usuario: actor, servicios: s, hoy, modo } = useSesion();
+  const conCorreo = modo === 'supabase';
   const { toast } = useAvisos();
   const [nombre, setNombre] = useState(existente?.nombre ?? '');
   const [usuario, setUsuario] = useState(existente?.usuario ?? '');
@@ -41,8 +42,13 @@ function FormularioUsuario({ existente, onCerrar, onGuardado }: { existente: Usu
     <Modal titulo={existente ? `Editar · ${existente.nombre}` : 'Nueva persona'} onCerrar={onCerrar}>
       <form className="pila" onSubmit={guardar}>
         <Campo etiqueta="Nombre">{(id) => <input id={id} required value={nombre} onChange={(e) => setNombre(e.target.value)} />}</Campo>
-        <Campo etiqueta="Usuario de acceso" ayuda="Minúsculas, sin espacios. Ej.: carlos.perez">
-          {(id) => <input id={id} required autoCapitalize="none" value={usuario} onChange={(e) => setUsuario(e.target.value)} />}
+        <Campo
+          etiqueta={conCorreo ? 'Correo electrónico' : 'Usuario de acceso'}
+          ayuda={conCorreo
+            ? (existente ? 'El correo es la identidad de acceso y no se cambia desde aquí.' : 'Con este correo iniciará sesión.')
+            : 'Minúsculas, sin espacios. Ej.: carlos.perez'}
+        >
+          {(id) => <input id={id} type={conCorreo ? 'email' : 'text'} required autoCapitalize="none" disabled={conCorreo && !!existente} value={usuario} onChange={(e) => setUsuario(e.target.value)} />}
         </Campo>
         <fieldset className="campo">
           <legend>Roles</legend>
@@ -102,7 +108,7 @@ function RestablecerClave({ persona, onCerrar }: { persona: Usuario; onCerrar: (
 }
 
 export function Equipo() {
-  const { usuario: actor, servicios: s } = useSesion();
+  const { usuario: actor, servicios: s, modo } = useSesion();
   const { toast, confirmar } = useAvisos();
   const [editando, setEditando] = useState<Usuario | 'nuevo' | null>(null);
   const [clave, setClave] = useState<Usuario | null>(null);
@@ -134,7 +140,7 @@ export function Equipo() {
             <thead>
               <tr>
                 <th scope="col">Nombre</th>
-                <th scope="col">Usuario</th>
+                <th scope="col">{modo === 'supabase' ? 'Correo' : 'Usuario'}</th>
                 <th scope="col">Roles</th>
                 <th scope="col">Inicio</th>
                 <th scope="col">Estado</th>
